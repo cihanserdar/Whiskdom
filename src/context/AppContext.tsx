@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { createContext, ReactNode, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
@@ -51,6 +52,13 @@ export interface WasteStats {
   wastedCount: number;
 }
 
+export interface CreatorProfileData {
+  name: string;
+  badge: string;
+  recipeCount: number;
+  xp: number;
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -66,9 +74,12 @@ export interface Recipe {
   isSubmitted?: boolean;
   diets?: string[];
   allergens?: string[];
+  is_approved?: boolean;
+  user_id?: string;
+  creatorProfile?: CreatorProfileData;
+  [key: string]: unknown;
 }
 
-// 💡 Haftalık Planlayıcı Türleri Eklendi
 export interface MealPlanItem {
   recipeId: string;
   recipeTitle: string;
@@ -93,7 +104,7 @@ export interface AppContextType {
   userProfile: UserProfile;
   expiryThreshold: number;
   loading: boolean;
-  user: any;
+  user: User | null;
   setExpiryThreshold: (days: number) => void;
   setUserPreferences: (prefs: UserPreferences) => void;
   setUserProfile: (profile: UserProfile) => void;
@@ -115,13 +126,11 @@ export interface AppContextType {
   toggleHistory: (recipeId: string, ingredientsCount?: number) => void;
   getExpiringItemsByRange: (rangeDays: number) => InventoryItem[];
   getExpiredItems: () => InventoryItem[];
-  resetAllData: () => Promise<void>;
   isPasswordRecovery: boolean;
   setIsPasswordRecovery: (status: boolean) => void;
   fetchRecipesFromSupabase: () => Promise<void>;
   addRecipeToSupabase: (recipe: Recipe) => Promise<void>;
   deleteRecipe: (id: string) => Promise<void>;
-  // 💡 Planlayıcı Fonksiyonları Eklendi
   mealPlan: WeeklyMealPlan;
   assignRecipeToMealPlan: (day: string, mealType: 'breakfast' | 'lunch' | 'dinner', recipeId: string, recipeTitle: string) => Promise<void>;
   removeRecipeFromMealPlan: (day: string, mealType: 'breakfast' | 'lunch' | 'dinner') => Promise<void>;
@@ -133,7 +142,7 @@ const CART_STORAGE_KEY = '@whiskdom_cart_v2';
 const FAVORITES_STORAGE_KEY = '@whiskdom_favorites';
 const HISTORY_STORAGE_KEY = '@whiskdom_history';
 const THRESHOLD_STORAGE_KEY = '@whiskdom_threshold';
-const MEAL_PLAN_STORAGE_KEY = '@whiskdom_meal_plan_v1'; // 💡 Depolama Anahtarı Eklendi
+const MEAL_PLAN_STORAGE_KEY = '@whiskdom_meal_plan_v1';
 
 export const toTitleCase = (str: string): string => {
   if (!str) return '';
@@ -160,7 +169,7 @@ const parseTRDate = (dateStr: string): Date => {
 };
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [inventory, setInventoryState] = useState<InventoryItem[]>([]);
   const [recipes, setRecipesState] = useState<Recipe[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -179,7 +188,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     avatarUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
   });
 
-  // 💡 Planlayıcı State'i Eklendi
   const [mealPlan, setMealPlan] = useState<WeeklyMealPlan>({
     Pazartesi: {},
     Salı: {},
@@ -190,7 +198,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     Pazar: {},
   });
   
-  // Supabase Oturum Dinleyicisi
   useEffect(() => {
     let mounted = true;
 
@@ -245,8 +252,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
           }
         }
-      } catch (err) {
-        console.error('Oturum okuma hatası:', err);
+      } catch (err: unknown) {
         if (mounted) setLoading(false);
       }
     };
@@ -286,44 +292,46 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (data) {
-        const formattedRecipes: Recipe[] = data.map((r: any) => {
+        const formattedRecipes: Recipe[] = data.map((r: Record<string, unknown>) => {
           let parsedIngredients: string[] = [];
           let parsedQuantities: string[] = [];
 
-          if (Array.isArray(r.ingredients)) {
-            parsedIngredients = r.ingredients.map((ing: any) =>
-              typeof ing === 'string' ? ing : ing.name
+          const rawIngredients = r.ingredients;
+          if (Array.isArray(rawIngredients)) {
+            parsedIngredients = rawIngredients.map((ing: unknown) =>
+              typeof ing === 'string' ? ing : (ing as Record<string, string>)?.name || ''
             );
             
-            parsedQuantities = r.ingredients.map((ing: any) => {
+            parsedQuantities = rawIngredients.map((ing: unknown) => {
               if (typeof ing === 'string') return ing;
-              if (ing.quantity && ing.name && ing.quantity.toLowerCase().includes(ing.name.toLowerCase())) {
-                return ing.quantity;
+              const itemObj = ing as Record<string, string>;
+              if (itemObj?.quantity && itemObj?.name && itemObj.quantity.toLowerCase().includes(itemObj.name.toLowerCase())) {
+                return itemObj.quantity;
               }
-              return ing.quantity ? `${ing.quantity} ${ing.name || ''}`.trim() : (ing.name || '');
+              return itemObj?.quantity ? `${itemObj.quantity} ${itemObj.name || ''}`.trim() : (itemObj?.name || '');
             });
           }
 
           return {
             id: String(r.id),
-            title: r.title,
-            description: r.description,
-            category: r.category || 'Ana Yemek',
+            title: String(r.title || ''),
+            description: r.description ? String(r.description) : undefined,
+            category: String(r.category || 'Ana Yemek'),
             mainIngredient: parsedIngredients[0] || 'Genel',
             ingredients: parsedIngredients,
             ingredientsWithQuantities: parsedQuantities,
-            cookingTime: r.cook_time || r.prep_time || '20 Dk',
-            instructions: r.instructions || [],
-            isAI: r.is_ai || false,
-            isUserCreated: r.is_user_created || false,
-            isSubmitted: r.is_submitted || false,
-            diets: r.diets || [],
-            allergens: r.allergens || [],
-            is_approved: r.is_approved || false,
-            user_id: r.user_id,
+            cookingTime: String(r.cook_time || r.prep_time || '20 Dk'),
+            instructions: Array.isArray(r.instructions) ? r.instructions.map(String) : [],
+            isAI: Boolean(r.is_ai),
+            isUserCreated: Boolean(r.is_user_created),
+            isSubmitted: Boolean(r.is_submitted),
+            diets: Array.isArray(r.diets) ? r.diets.map(String) : [],
+            allergens: Array.isArray(r.allergens) ? r.allergens.map(String) : [],
+            is_approved: Boolean(r.is_approved),
+            user_id: r.user_id ? String(r.user_id) : undefined,
             creatorProfile: {
-              name: r.creator_name || 'Topluluk Şefi',
-              badge: r.creator_title || '🌟 Gurme Şef',
+              name: String(r.creator_name || 'Topluluk Şefi'),
+              badge: String(r.creator_title || '🌟 Gurme Şef'),
               recipeCount: 3,
               xp: 1420
             }
@@ -332,29 +340,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         setRecipesState(formattedRecipes);
       }
-    } catch (err) {
-      console.error('Tarifler çekilirken hata oluştu:', err);
+    } catch (err: unknown) {
+      // Sessizce geçilir
     }
   };
 
   const addRecipeToSupabase = async (recipe: Recipe) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
 
       const { data: profileData } = await supabase
         .from('profiles')
         .select('name, title')
-        .eq('id', user.id)
+        .eq('id', authUser.id)
         .single();
 
       const creatorName = profileData?.name || 'Topluluk Şefi';
       const creatorTitle = profileData?.title || '🌟 Gurme Şef';
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('recipes')
         .insert([{
-          user_id: user.id,
+          user_id: authUser.id,
           creator_name: creatorName,
           creator_title: creatorTitle,
           title: recipe.title,
@@ -372,19 +380,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           is_user_created: recipe.isUserCreated ?? true,
           is_submitted: recipe.isSubmitted || false,
           is_ai: recipe.isAI ?? false,
-        }])
-        .select()
-        .single();
+        }]);
 
       if (error) {
-        console.error('Supabase tarif ekleme hatası:', error);
         Alert.alert("Hata", `Tarif eklenirken hata oluştu: ${error.message}`);
         return;
       }
 
       await fetchRecipesFromSupabase();
-    } catch (err) {
-      console.error('Tarif ekleme beklenmeyen hata:', err);
+    } catch (err: unknown) {
+      // Sessizce geçilir
     }
   };
 
@@ -397,12 +402,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
       setRecipesState(prev => prev.filter(recipe => recipe.id !== id));
       Alert.alert("Silindi", "Tarif başarıyla kaldırıldı.");
-    } catch (err) {
-      console.error('Tarif silinirken beklenmeyen hata:', err);
+    } catch (err: unknown) {
+      // Sessizce geçilir
     }
   };
 
-  const fetchUserData = async (currentUser: any) => {
+  const fetchUserData = async (currentUser: User) => {
     setLoading(true);
     try {
       await ensureUserProfileExists(currentUser);
@@ -435,14 +440,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .order('created_at', { ascending: false });
 
       if (inventoryData) {
-        const formatted = inventoryData.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          brand: item.brand,
-          quantity: item.quantity,
-          expiryDate: item.expiry_date,
-          imageUrl: item.image_url,
-          category: item.category,
+        const formatted: InventoryItem[] = inventoryData.map((item: Record<string, unknown>) => ({
+          id: String(item.id),
+          name: String(item.name || ''),
+          brand: item.brand ? String(item.brand) : undefined,
+          quantity: String(item.quantity || ''),
+          expiryDate: String(item.expiry_date || ''),
+          imageUrl: item.image_url ? String(item.image_url) : undefined,
+          category: item.category ? String(item.category) : undefined,
         }));
         setInventoryState(formatted);
         safeScheduleNotifications(formatted);
@@ -456,15 +461,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       if (statsData) {
         setWasteStats({
-          savedCount: statsData.saved_count || 0,
-          wastedCount: statsData.wasted_count || 0,
+          savedCount: Number(statsData.saved_count || 0),
+          wastedCount: Number(statsData.wasted_count || 0),
         });
       }
 
       const storedCart = await AsyncStorage.getItem(CART_STORAGE_KEY);
       if (storedCart) setCart(JSON.parse(storedCart));
 
-      // 💡 Planlayıcı Verisi Doğru Yere Eklendi
       const storedMealPlan = await AsyncStorage.getItem(MEAL_PLAN_STORAGE_KEY);
       if (storedMealPlan) setMealPlan(JSON.parse(storedMealPlan));
 
@@ -477,8 +481,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const storedThreshold = await AsyncStorage.getItem(THRESHOLD_STORAGE_KEY);
       if (storedThreshold) setExpiryThresholdState(Number(storedThreshold));
 
-    } catch (error) {
-      console.error('Supabase verileri yüklenirken hata oluştu:', error);
+    } catch (error: unknown) {
+      // Sessizce geçilir
     } finally {
       setLoading(false);
     }
@@ -487,8 +491,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const safeScheduleNotifications = (items: InventoryItem[]) => {
     try {
       scheduleExpiryNotifications(items);
-    } catch (e) {
-      console.log('Safe notification schedule skipped:', e);
+    } catch (e: unknown) {
+      // Sessizce geçilir
     }
   };
 
@@ -512,13 +516,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     if (!error && data) {
       const newItem: InventoryItem = {
-        id: data.id,
-        name: data.name,
-        brand: data.brand,
-        quantity: data.quantity,
-        expiryDate: data.expiry_date,
-        imageUrl: data.image_url,
-        category: data.category,
+        id: String(data.id),
+        name: String(data.name),
+        brand: data.brand ? String(data.brand) : undefined,
+        quantity: String(data.quantity),
+        expiryDate: String(data.expiry_date),
+        imageUrl: data.image_url ? String(data.image_url) : undefined,
+        category: data.category ? String(data.category) : undefined,
       };
       const updated = [newItem, ...inventory];
       setInventoryState(updated);
@@ -579,20 +583,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       .select();
 
     if (error) {
-      console.error("Toplu kayıt hatası:", error);
       Alert.alert("Hata ❌", `Ürünler eklenirken veritabanı hatası oluştu: ${error.message}`);
       return;
     }
 
     if (data && data.length > 0) {
-      const insertedItems: InventoryItem[] = data.map((d: any) => ({
+      const insertedItems: InventoryItem[] = data.map((d: Record<string, unknown>) => ({
         id: String(d.id),
-        name: d.name,
-        brand: d.brand,
-        quantity: d.quantity,
-        expiryDate: d.expiry_date,
-        imageUrl: d.image_url,
-        category: d.category,
+        name: String(d.name || ''),
+        brand: d.brand ? String(d.brand) : undefined,
+        quantity: String(d.quantity || ''),
+        expiryDate: String(d.expiry_date || ''),
+        imageUrl: d.image_url ? String(d.image_url) : undefined,
+        category: d.category ? String(d.category) : undefined,
       }));
 
       setInventoryState((prevInventory) => {
@@ -678,7 +681,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updated));
   };
 
-  // 💡 Planlayıcı Atama ve Silme Fonksiyonları Eklendi
   const assignRecipeToMealPlan = async (day: string, mealType: 'breakfast' | 'lunch' | 'dinner', recipeId: string, recipeTitle: string) => {
     const updated = {
       ...mealPlan,
@@ -783,21 +785,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const resetAllData = async () => {
-    if (user) {
-      await supabase.from('inventory').delete().eq('user_id', user.id);
-      await supabase.from('waste_stats').update({ saved_count: 0, wasted_count: 0 }).eq('user_id', user.id);
-    }
-    await AsyncStorage.clear();
-    setInventoryState([]);
-    setCart([]);
-    setFavorites([]);
-    setHistory([]);
-    setWasteStats({ savedCount: 0, wastedCount: 0 });
-    setUserPreferencesState({ diets: [], allergens: [] });
-    setIsPasswordRecovery(false);
-  };
-
   return (
     <AppContext.Provider 
       value={{ 
@@ -835,7 +822,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toggleHistory,
         getExpiringItemsByRange,
         getExpiredItems,
-        resetAllData,
         fetchRecipesFromSupabase,
         addRecipeToSupabase,
         deleteRecipe,

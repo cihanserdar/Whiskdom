@@ -18,9 +18,7 @@ import {
 import { AppContext, InventoryItem } from '../context/AppContext';
 import SplashScreen from '../screens/SplashScreen';
 import { checkQuota, consumeQuota } from '../services/quotaService';
-
-// GOOGLE AI STUDIO API KEY
-const GEMINI_API_KEY = 'AQ.Ab8RN6K0V10O7FQ6GM8ffv0kYLF6YbbVZwMkUehagCQq1jD7rw';
+import { supabase } from '../services/supabase'; // 🔒 Güvenli Supabase istemcisi
 
 const BRAND_SUGGESTIONS = ['Torku', 'Sütaş', 'İçim', 'Pınar', 'Öncü', 'Filiz', 'Tadım', 'Banvit', 'Reis', 'Söke', 'Komili'];
 const PRODUCT_SUGGESTIONS = ['Çikolata', 'Süt', 'Yumurta', 'Kaşar Peyniri', 'Yoğurt', 'Tereyağı', 'Domates', 'Kuru Soğan', 'Salça', 'Makarna', 'Kıyma'];
@@ -109,28 +107,35 @@ export default function HomeScreen() {
   const [filteredBrands, setFilteredBrands] = useState<string[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<string[]>([]);
 
-  // Sayfa yüklendiğinde kalan fiş hakkını çek
+  // Sayfa yüklendiğinde kalan fiş hakkını quotaService üzerinden çek
   useEffect(() => {
     updateReceiptQuota();
   }, []);
 
   const updateReceiptQuota = async () => {
-    const status = await checkQuota('receipt');
-    setRemainingReceiptQuota(status.remaining);
+    try {
+      const quotaStatus = await checkQuota('receipt');
+      setRemainingReceiptQuota(quotaStatus.remaining);
+    } catch (e) {
+      console.error('Kota çekilemedi:', e);
+    }
   };
 
-  // AKILLI YENİDEN DENEME MEKANİZMALI GEMINI ANALİZİ
+  // AKILLI YENİDEN DENEME MEKANİZMALI GEMINI ANALİZİ (SUPABASE EDGE FUNCTION ÜZERİNDEN)
   const analyzeReceiptWithGemini = async (base64Image: string, imageUri: string) => {
-    // 1. İSTEK ÖNCESİ KOTA KONTROLÜ
-    const quotaStatus = await checkQuota('receipt');
-    setRemainingReceiptQuota(quotaStatus.remaining);
+    // 1. İSTEK ÖNCESİ SUNUCU TARAFI KOTA KONTROLÜ
+    try {
+      const quotaStatus = await checkQuota('receipt');
 
-    if (!quotaStatus.allowed) {
-      Alert.alert(
-        "Günlük Fiş Tarama Hakkı Doldu ⏳",
-        `Günlük fiş tarama limitinize ulaştınız.\nYenilenmesine kalan süre:\n${quotaStatus.resetTimeText}\n\nSınırsız tarama için Pro pakete geçebilirsiniz!`
-      );
-      return;
+      if (!quotaStatus.allowed) {
+        Alert.alert(
+          "Günlük Fiş Tarama Hakkı Doldu ⏳",
+          `Günlük fiş tarama limitinize ulaştınız.\n${quotaStatus.resetTimeText}`
+        );
+        return;
+      }
+    } catch (e) {
+      console.error('Kota kontrol hatası:', e);
     }
 
     setReceiptImageUri(imageUri);
@@ -143,46 +148,23 @@ export default function HomeScreen() {
 
     while (attempt < maxRetries) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    {
-                      inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: base64Image,
-                      },
-                    },
-                    {
-                      text: 'Bu alışveriş fişi veya gıda listesi fotoğrafındaki ürünleri tespit et. Sadece şu JSON formatında cevap ver: [{"name": "Ürün Adı", "brand": "Marka", "quantity": "Miktar (örn: 1 Litre, 2 Adet)"}]. Başka hiçbir açıklama yazma.',
-                    },
-                  ],
-                },
-              ],
-            }),
-          }
-        );
+        const prompt = 'Bu alışveriş fişi veya gıda listesi fotoğrafındaki ürünleri tespit et. Sadece şu JSON formatında cevap ver: [{"name": "Ürün Adı", "brand": "Marka", "quantity": "Miktar (örn: 1 Litre, 2 Adet)"}]. Başka hiçbir açıklama yazma.';
 
-        const json = await response.json();
+        // Doğrudan Supabase Edge Function çağrısı
+        const { data, error } = await supabase.functions.invoke('generate-recipe', {
+          body: { 
+            prompt: prompt,
+            base64Image: base64Image 
+          },
+        });
 
-        if (json.error && (json.error.code === 429 || json.error.status === 'RESOURCE_EXHAUSTED')) {
-          attempt++;
-          if (attempt < maxRetries) {
-            await new Promise((resolve) => setTimeout(resolve, 4000 * attempt));
-            continue;
-          }
+        if (error) {
+          throw new Error(error.message || 'Supabase fonksiyonu hata döndürdü.');
         }
 
-        if (json.candidates && json.candidates[0]?.content?.parts[0]?.text) {
-          const responseText = json.candidates[0].content.parts[0].text;
+        const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+
+        if (responseText) {
           const jsonStart = responseText.indexOf('[');
           const jsonEnd = responseText.lastIndexOf(']') + 1;
 
@@ -190,7 +172,7 @@ export default function HomeScreen() {
             const jsonString = responseText.substring(jsonStart, jsonEnd);
             const parsedData = JSON.parse(jsonString);
 
-            const formattedItems: ScannedReceiptItem[] = parsedData.map((item: any, idx: number) => ({
+            const formattedItems: ScannedReceiptItem[] = (parsedData as Array<{ name?: string; brand?: string; quantity?: string }>).map((item, idx) => ({
               id: `gemini_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
               name: item.name || 'Bilinmeyen Ürün',
               brand: item.brand || '',
@@ -201,20 +183,18 @@ export default function HomeScreen() {
             setReceiptItems(formattedItems);
             setIsAnalyzing(false);
             
-            // 2. BAŞARILI SONUÇ DÖNDÜĞÜ AN KOTAYI DÜŞÜR VE GÜNCELLE
+            // 2. BAŞARILI SONUÇ DÖNDÜĞÜ AN VERİTABANINDA KOTAYI 1 DÜŞÜR VE SAYACI BAŞLAT
             await consumeQuota('receipt');
             updateReceiptQuota();
             return;
           }
-        } else if (json.error) {
-          throw new Error(json.error.message || 'API servisi hata döndürdü.');
         }
         break;
-      } catch (error: any) {
+      } catch (error: unknown) {
         attempt++;
         if (attempt >= maxRetries) {
           console.error('Gemini API Hatası:', error);
-          Alert.alert('Hata', 'Google Gemini API istek limitine takıldı. Lütfen birkaç saniye bekleyip tekrar deneyin.');
+          Alert.alert('Hata', 'Google Gemini AI analizinde bir hata oluştu. Lütfen birkaç saniye bekleyip tekrar deneyin.');
           setIsAnalyzing(false);
           break;
         }
@@ -233,7 +213,7 @@ export default function HomeScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       base64: true,
       quality: 0.8,
@@ -367,7 +347,7 @@ export default function HomeScreen() {
       const parsed = parseTRDate(item.expiryDate);
       if (parsed) setSelectedDateObj(parsed);
 
-      const nutrients = (item as any).nutrients || {};
+      const nutrients = item.nutrients || {};
       setFormCalories(nutrients.calories?.toString() || '');
       setFormProtein(nutrients.protein?.toString() || '');
       setFormCarbs(nutrients.carbs?.toString() || '');
@@ -391,7 +371,7 @@ export default function HomeScreen() {
     setIsModalVisible(true);
   };
 
-  const handleValueChange = (event: any, selectedDate?: Date) => {
+  const handleValueChange = (event: { type: string }, selectedDate?: Date) => {
     if (event.type === 'set' && selectedDate) {
       setSelectedDateObj(selectedDate);
       const day = String(selectedDate.getDate()).padStart(2, '0');
@@ -422,7 +402,7 @@ export default function HomeScreen() {
         expiryDate: formExpiryDate,
         imageUrl: formImageUrl,
         ...(nutrients.calories > 0 ? { nutrients } : {}),
-      } as any);
+      });
     } else {
       addInventoryItem({
         id: Date.now().toString(),
@@ -432,7 +412,7 @@ export default function HomeScreen() {
         expiryDate: formExpiryDate,
         imageUrl: formImageUrl,
         ...(nutrients.calories > 0 ? { nutrients } : {}),
-      } as any);
+      });
     }
     setIsModalVisible(false);
   };
@@ -529,7 +509,7 @@ export default function HomeScreen() {
       {/* 🏷️ FİŞ KOTA GÖSTERGESİ */}
       <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 8, borderWidth: 1, borderColor: '#E9D5FF' }}>
         <Text style={{ fontSize: 11, color: '#7E22CE', fontWeight: '800' }}>
-          🧾 Günlük Kalan Fiş Tarama Hakkı: {remainingReceiptQuota !== null ? `${remainingReceiptQuota} / 2` : 'Yükleniyor...'}
+          🧾 Günlük Kalan Fiş Tarama Hakkı: {remainingReceiptQuota !== null ? `${remainingReceiptQuota} / 1` : 'Yükleniyor...'}
         </Text>
       </View>
 
@@ -576,7 +556,7 @@ export default function HomeScreen() {
             diffDays = Math.ceil((expiryDateObj.getTime() - today.getTime()) / (1000 * 3600 * 24));
           }
 
-          const nutrients = (item as any).nutrients;
+          const nutrients = item.nutrients;
           const categoryEmoji = getProductCategoryIcon(item.name);
 
           return (

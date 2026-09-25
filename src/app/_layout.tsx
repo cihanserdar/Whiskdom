@@ -35,8 +35,9 @@ function MainTabsNavigator() {
       setNewPassword('');
       setIsPasswordRecovery(false);
       Alert.alert("Başarılı 🔒", "Şifreniz güvenli bir şekilde güncellendi.");
-    } catch (error: any) {
-      Alert.alert("Hata ❌", error.message || "Şifre güncellenirken bir sorun oluştu.");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Şifre güncellenirken bir sorun oluştu.";
+      Alert.alert("Hata ❌", errorMessage);
     }
   };
 

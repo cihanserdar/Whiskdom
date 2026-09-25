@@ -1,9 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { UserPreferences } from '../context/AppContext';
-
-const GEMINI_API_KEY = "AQ.Ab8RN6K0V10O7FQ6GM8ffv0kYLF6YbbVZwMkUehagCQq1jD7rw";
-
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+import { supabase } from './supabase'; // Supabase istemcinin olduğu dosya
 
 export interface AIRecipeResult {
   title: string;
@@ -21,7 +17,16 @@ export interface ScannedItem {
   expiryDate: string; // "DD-MM-YYYY" formatında
 }
 
-// 1. AI Tarif Üretici
+export interface UserRecipeInput {
+  title: string;
+  category: string;
+  cookingTime: string;
+  servings: string;
+  rawIngredients: string;
+  rawInstructions: string;
+}
+
+// 1. AI Tarif Üretici (Supabase Edge Function üzerinden)
 export const generateRecipeWithAI = async (
   ingredients: string[], 
   preferences?: UserPreferences,
@@ -61,13 +66,16 @@ Format şu şekilde olsun:
 }`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: prompt,
+    const { data, error } = await supabase.functions.invoke('generate-recipe', {
+      body: { prompt },
     });
 
-    if (response.text) {
-      const jsonString = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+    if (error) throw error;
+
+    // Supabase Edge Function'dan dönen Gemini yanıtını işliyoruz
+    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+    if (textResponse) {
+      const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(jsonString);
     }
   } catch (error) {
@@ -99,21 +107,18 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
 ]`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: [
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: base64Image,
-          },
-        },
-        { text: prompt },
-      ],
+    const { data, error } = await supabase.functions.invoke('generate-recipe', {
+      body: { 
+        prompt: prompt,
+        base64Image: base64Image 
+      },
     });
 
-    if (response.text) {
-      const jsonString = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+    if (error) throw error;
+
+    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+    if (textResponse) {
+      const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(jsonString);
     }
   } catch (error) {
@@ -122,15 +127,7 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
   return null;
 };
 
-export interface UserRecipeInput {
-  title: string;
-  category: string;
-  cookingTime: string;
-  servings: string;
-  rawIngredients: string;
-  rawInstructions: string;
-}
-
+// 3. Kullanıcı Tarifini Biçimlendirme
 export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
   try {
     const prompt = 'Sen profesyonel bir sefsin. Sana verilen duzensiz veya hatali yemek tarifini analiz edip standart bir formata getireceksin.\n\n' +
@@ -158,16 +155,13 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
       '  ]\n' +
       '}';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
+    const { data, error } = await supabase.functions.invoke('generate-recipe', {
+      body: { prompt },
     });
 
-    const textResponse = response.text;
+    if (error) throw error;
 
+    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
     if (!textResponse) {
       console.warn("AI Yanit vermedi");
       return null;

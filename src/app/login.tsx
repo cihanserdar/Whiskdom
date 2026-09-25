@@ -51,8 +51,8 @@ export default function LoginScreen() {
       } else {
         await signInWithEmail(email, password);
       }
-    } catch (error: any) {
-      const errorMessage = error?.message?.toLowerCase() || '';
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
 
       // Yanlış veya bulunamayan e-posta/şifre durumunda kullanıcıyı yönlendir
       if (
@@ -75,7 +75,8 @@ export default function LoginScreen() {
           ]
         );
       } else {
-        Alert.alert('Giriş Hatası', error.message || 'Bir hata oluştu.');
+        const fallbackMsg = error instanceof Error ? error.message : 'Bir hata oluştu.';
+        Alert.alert('Giriş Hatası', fallbackMsg);
       }
     } finally {
       setLoading(false);
@@ -88,8 +89,9 @@ export default function LoginScreen() {
       await signInWithGoogle();
       // Buraya router.replace('/(tabs)') yazma! 
       // AppContext içindeki onAuthStateChange oturumu algılayıp kendisi sekmelere yönlendirecektir.
-    } catch (error: any) {
-      Alert.alert('Google Giriş Hatası', error.message || 'Giriş yapılamadı.');
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Giriş yapılamadı.';
+      Alert.alert('Google Giriş Hatası', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -115,8 +117,9 @@ export default function LoginScreen() {
               setLoading(true);
               await sendPasswordResetEmail(targetEmail);
               Alert.alert('E-posta Gönderildi 📩', 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
-            } catch (err: any) {
-              Alert.alert('Hata ❌', err.message || 'Sıfırlama e-postası gönderilemedi.');
+            } catch (err: unknown) {
+              const errMsg = err instanceof Error ? err.message : 'Sıfırlama e-postası gönderilemedi.';
+              Alert.alert('Hata ❌', errMsg);
             } finally {
               setLoading(false);
             }
@@ -303,20 +306,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-  },
-  quickTestBtn: {
-    backgroundColor: '#E8F5E9',
-    borderWidth: 1,
-    borderColor: '#A3D9A5',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  quickTestBtnText: {
-    color: '#2E7D32',
-    fontSize: 14,
-    fontWeight: '800',
   },
   dividerContainer: {
     flexDirection: 'row',

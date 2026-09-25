@@ -88,21 +88,16 @@ export default function RecipesScreen() {
     setExpiryThreshold,
     fetchRecipesFromSupabase,
     addRecipeToSupabase,
-    deleteRecipe,
-    mealPlan,                           // 📅 Eklendi
-    assignRecipeToMealPlan,   // 📅 Eklendi
-    removeRecipeFromMealPlan  // 📅 Eklendi
+    deleteRecipe
   } = useContext(AppContext);
 
   const activeRangeItems = getExpiringItemsByRange(expiryThreshold);
-  const expiredItems = getExpiredItems();
   const criticalUrgentItems = getExpiringItemsByRange(3); 
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiRecipe, setAiRecipe] = useState<AIRecipeResult | null>(null);
 
-  // 🪟 AI ŞEF KATEGORİ SEÇİM MODALI STATE'LERİ
   const [aiCategoryModalVisible, setAiCategoryModalVisible] = useState(false);
   const [selectedAiCategory, setSelectedAiCategory] = useState<string>('Fit & Sağlıklı');
   const [remainingQuota, setRemainingQuota] = useState<number | null>(null);
@@ -118,7 +113,6 @@ export default function RecipesScreen() {
   const [collectionFilter, setCollectionFilter] = useState<'all' | 'favorites' | 'history'>('all');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'complete' | 'missing'>('all');
 
-  // 📄 SAYFALAMA (PAGINATION) STATE'LERİ
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recipesPerPage, setRecipesPerPage] = useState<number>(10);
 
@@ -136,25 +130,21 @@ export default function RecipesScreen() {
   const [isSubmittedToLibrary, setIsSubmittedToLibrary] = useState(false);
   const [isFormattingAI, setIsFormattingAI] = useState(false);
 
-  // 📅 PLANA EKLE MODALI & SEÇİMLERİ İÇİN STATE'LER
-  const [mealPlanModalVisible, setMealPlanModalVisible] = useState(false);
-  const [recipeToPlan, setRecipeToPlan] = useState<Recipe | null>(null);
-  const [selectedDay, setSelectedDay] = useState<string>('Pazartesi');
-  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner'>('dinner');
-
   useEffect(() => {
     fetchRecipesFromSupabase();
   }, []);
 
-  // Filtre veya arama değiştiğinde sayfayı 1. kategoriye/sayfaya sıfırla
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedCategory, collectionFilter, ingredientFilter, recipesPerPage]);
 
-  // Modal açıldığında kalan kotayı güncelle
   const handleOpenAiModal = async () => {
-    const status = await checkQuota('aiRecipe');
-    setRemainingQuota(status.remaining);
+    try {
+      const quotaStatus = await checkQuota('aiRecipe');
+      setRemainingQuota(quotaStatus.remaining);
+    } catch (e: unknown) {
+      // Sessizce geçilir
+    }
     setAiCategoryModalVisible(true);
   };
 
@@ -173,15 +163,18 @@ export default function RecipesScreen() {
   };
 
   const handleGenerateAIRecipe = async (targetCategory: string) => {
-    // 1. Önce kota kontrolü yapıyoruz
-    const quotaStatus = await checkQuota('aiRecipe');
-    
-    if (!quotaStatus.allowed) {
-      Alert.alert(
-        "Günlük Hak Doldu ⏳",
-        `AI Şef günlük kullanım hakkınızı tüketti.\nYenilenmesine kalan süre:\n${quotaStatus.resetTimeText}\n\nSınırsız kullanım için Pro pakete geçebilirsiniz!`
-      );
-      return;
+    try {
+      const quotaStatus = await checkQuota('aiRecipe');
+
+      if (!quotaStatus.allowed) {
+        Alert.alert(
+          "Günlük Hak Doldu ⏳",
+          `AI Şef günlük kullanım hakkınızı tüketti.\n${quotaStatus.resetTimeText}`
+        );
+        return;
+      }
+    } catch (e: unknown) {
+      // Sessizce geçilir
     }
 
     const allIngredientNames = inventory.map(item => item.name);
@@ -194,19 +187,18 @@ export default function RecipesScreen() {
     
     try {
       const result = await generateRecipeWithAI(allIngredientNames, userPreferences, targetCategory);
-      
       setAiLoading(false);
 
       if (result) {
         setAiRecipe(result);
-        // 2. İstek BAŞARILI olduğu an hakkı güvenle düşürüyoruz
         await consumeQuota('aiRecipe');
+        const updatedStatus = await checkQuota('aiRecipe');
+        setRemainingQuota(updatedStatus.remaining);
       } else {
         Alert.alert("Hata", "AI tarif oluştururken bir sorun oluştu. Lütfen tekrar deneyin.");
       }
-    } catch (error) {
+    } catch (error: unknown) {
       setAiLoading(false);
-      console.error("AI Üretim Hatası:", error);
     }
   };
 
@@ -246,10 +238,9 @@ export default function RecipesScreen() {
       isUserCreated: true,
       isAI: false,
       isSubmitted: isSubmittedToLibrary,
+      diets: newFormDiets,
+      allergens: newFormAllergens,
     };
-
-    (recipeData as any).diets = newFormDiets;
-    (recipeData as any).allergens = newFormAllergens;
 
     if (editingRecipeId) {
       const { error } = await supabase
@@ -314,8 +305,8 @@ export default function RecipesScreen() {
     setNewTime(recipe.cookingTime || '25 Dk');
     setNewRawIngredients(recipe.ingredientsWithQuantities?.join('\n') || recipe.ingredients.join('\n'));
     setNewRawInstructions(recipe.instructions?.join('\n') || '');
-    setNewFormDiets((recipe as any).diets || []);
-    setNewFormAllergens((recipe as any).allergens || []);
+    setNewFormDiets(recipe.diets || []);
+    setNewFormAllergens(recipe.allergens || []);
     setIsSubmittedToLibrary(recipe.isSubmitted || false);
     setSelectedRecipe(null);
     setAddRecipeModalVisible(true);
@@ -328,18 +319,18 @@ export default function RecipesScreen() {
     setNewTime(recipe.cookingTime || '25 Dk');
     setNewRawIngredients(recipe.ingredientsWithQuantities?.join('\n') || recipe.ingredients.join('\n'));
     setNewRawInstructions(recipe.instructions?.join('\n') || '');
-    setNewFormDiets((recipe as any).diets || []);
-    setNewFormAllergens((recipe as any).allergens || []);
+    setNewFormDiets(recipe.diets || []);
+    setNewFormAllergens(recipe.allergens || []);
     setIsSubmittedToLibrary(false);
     setSelectedRecipe(null);
     setAddRecipeModalVisible(true);
   };
 
   const handleOpenUserProfile = async (recipe: Recipe) => {
-    const targetUserId = (recipe as any).user_id;
+    const targetUserId = recipe.user_id;
 
     const userRecipeCount = targetUserId 
-      ? recipes.filter(r => (r as any).user_id === targetUserId).length 
+      ? recipes.filter(r => r.user_id === targetUserId).length 
       : 1;
 
     let profileName = 'Topluluk Şefi';
@@ -357,13 +348,13 @@ export default function RecipesScreen() {
         if (data && !error) {
           profileName = data.name || profileName;
           profileBadge = data.active_title || data.title || profileBadge;
-          profileXp = data.xp !== null && data.xp !== undefined ? data.xp : 0;
+          profileXp = data.xp !== null && data.xp !== undefined ? Number(data.xp) : 0;
         }
-      } catch (err) {
-        console.log('Profil bilgisi çekilemedi:', err);
+      } catch (err: unknown) {
+        // Sessizce geçilir
       }
-    } else if ((recipe as any).creatorProfile) {
-      const cp = (recipe as any).creatorProfile;
+    } else if (recipe.creatorProfile) {
+      const cp = recipe.creatorProfile;
       profileName = cp.name || profileName;
       profileBadge = cp.badge || profileBadge;
       profileXp = cp.xp !== undefined ? cp.xp : 0;
@@ -444,8 +435,8 @@ export default function RecipesScreen() {
           .update({ total_cooked: newHistoryCount })
           .eq('id', authUser.id);
       }
-    } catch (err) {
-      console.log('Pişirilen tarif sayısı güncellenirken hata:', err);
+    } catch (err: unknown) {
+      // Sessizce geçilir
     }
 
     if (isAlreadyCooked) {
@@ -456,8 +447,8 @@ export default function RecipesScreen() {
   };
 
   const handleOpenYouTubeVideo = (recipeTitle: string) => {
-    const searchQuery = encodeURIComponent(`${recipeTitle} tarifi nasıl yapılır`);
-    const youtubeUrl = `https://www.youtube.com/results?search_query=${searchQuery}`;
+    const ytQuery = encodeURIComponent(`${recipeTitle} tarifi nasıl yapılır`);
+    const youtubeUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
     Linking.openURL(youtubeUrl).catch(() => {
       Alert.alert("Hata", "YouTube uygulaması veya tarayıcı açılamadı.");
     });
@@ -487,10 +478,10 @@ export default function RecipesScreen() {
       if (selectedCategory === 'Sizin Tarifleriniz') {
         if (!recipe.isUserCreated || recipe.isAI) return false;
       } else if (selectedCategory === 'Topluluk Tarifleri') {
-        if (!(recipe as any).is_approved) return false;
+        if (!recipe.is_approved) return false;
       } else if (selectedCategory === 'Whiskdom Özel') {
-        if (!recipe.isAI && !(recipe as any).isWhiskdomSpecial) return false;
-      } else if (selectedCategory !== 'Tümü' && (recipe as any).category !== selectedCategory) {
+        if (!recipe.isAI && !recipe.isWhiskdomSpecial) return false;
+      } else if (selectedCategory !== 'Tümü' && recipe.category !== selectedCategory) {
         return false;
       }
 
@@ -543,7 +534,6 @@ export default function RecipesScreen() {
       return missingA - missingB;
     });
 
-  // 📄 SAYFALAMA HESAPLAMALARI
   const totalPages = recipesPerPage === 0 ? 1 : Math.ceil(filteredRecipes.length / recipesPerPage);
   const displayedRecipes = recipesPerPage === 0 
     ? filteredRecipes 
@@ -576,7 +566,6 @@ export default function RecipesScreen() {
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Mutfaktakilere danış, kendi tarifini oluştur</Text>
-
 
       <View style={styles.searchBarContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -626,7 +615,6 @@ export default function RecipesScreen() {
         </View>
       </ScrollView>
 
-      {/* ✨ AI ŞEF İLE ÖZEL TARİF ÜRET BUTONU */}
       <TouchableOpacity 
         style={styles.aiButton} 
         onPress={handleOpenAiModal}
@@ -742,7 +730,7 @@ export default function RecipesScreen() {
                         <Text style={{ color: '#047857', fontWeight: '800', fontSize: 10 }}>💚 Sizin Tarifiniz</Text>
                       </View>
                     )}
-                    {(item as any).is_approved && (
+                    {item.is_approved && (
                       <TouchableOpacity 
                         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#BFDBFE' }}
                         onPress={() => handleOpenUserProfile(item)}
@@ -757,7 +745,6 @@ export default function RecipesScreen() {
                     )}
                   </View>
 
-                  {/* 🤍 FAVORİ BUTONU */}
                   <View>
                     <TouchableOpacity onPress={() => toggleFavorite(item.id)} style={styles.starBtn} activeOpacity={0.7}>
                       <Text style={{ fontSize: 18 }}>{isFav ? '❤️' : '🤍'}</Text>
@@ -809,7 +796,6 @@ export default function RecipesScreen() {
             );
           })}
 
-          {/* 📄 SAYFALAMA KONTROL PANELİ */}
           <View style={styles.paginationContainer}>
             <View style={styles.perPageSelectorRow}>
               <Text style={styles.paginationLabel}>Sayfa Başına:</Text>
@@ -859,7 +845,6 @@ export default function RecipesScreen() {
         </>
       )}
 
-      {/* 🪟 AI ŞEF KATEGORİ SEÇİM MODALI */}
       <Modal
         visible={aiCategoryModalVisible}
         transparent={true}
@@ -870,10 +855,9 @@ export default function RecipesScreen() {
           <View style={[styles.modalContainer, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>👨‍🍳 AI Şef İçin Tarz / Kategori Seç</Text>
             
-            {/* 🏷️ Kalan Hak Göstergesi */}
             <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, alignSelf: 'center', marginVertical: 6 }}>
               <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '700' }}>
-                ✨ Günlük Kalan Hak: {remainingQuota !== null ? `${remainingQuota} / 3` : 'Yükleniyor...'}
+                ✨ Günlük Kalan AI Hak: {remainingQuota !== null ? `${remainingQuota} / 5` : 'Yükleniyor...'}
               </Text>
             </View>
 
@@ -932,7 +916,6 @@ export default function RecipesScreen() {
         </View>
       </Modal>
 
-      {/* MANUEL TARİF EKLEME / DÜZENLEME MODALI */}
       <Modal visible={addRecipeModalVisible} animationType="slide" transparent={true} onRequestClose={() => setAddRecipeModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: '90%' }]}>
@@ -1072,74 +1055,6 @@ export default function RecipesScreen() {
         </View>
       </Modal>
 
-      {/* HAFTALIK PLANA EKLEME MODALI */}
-      <Modal visible={mealPlanModalVisible} animationType="fade" transparent={true} onRequestClose={() => setMealPlanModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>📅 Haftalık Plana Ekle</Text>
-            <Text style={{ fontSize: 11, color: '#6C757D', textAlign: 'center', marginBottom: 12 }}>
-              "{recipeToPlan?.title}" tarifini hangi gün ve öğüne eklemek istersin?
-            </Text>
-
-            <Text style={styles.filterSectionTitle}>Gün Seçin:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'].map((day) => (
-                <TouchableOpacity
-                  key={day}
-                  style={[styles.modalOptionBtn, { width: '30%' }, selectedDay === day && styles.activeModalOptionBtn]}
-                  onPress={() => setSelectedDay(day)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.modalOptionText, selectedDay === day && styles.activeModalOptionText]}>{day}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.filterSectionTitle}>Öğün Seçin:</Text>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              {[
-                { label: '🌅 Kahvaltı', value: 'breakfast' },
-                { label: '☀️ Öğle', value: 'lunch' },
-                { label: '🌙 Akşam', value: 'dinner' }
-              ].map((meal) => (
-                <TouchableOpacity
-                  key={meal.value}
-                  style={[styles.modalOptionBtn, { flex: 1 }, selectedMealType === meal.value && styles.activeModalOptionBtn]}
-                  onPress={() => setSelectedMealType(meal.value as any)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.modalOptionText, selectedMealType === meal.value && styles.activeModalOptionText]}>{meal.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
-              <TouchableOpacity 
-                style={[styles.modalActionBtn, { backgroundColor: '#6C757D', flex: 1 }]}
-                onPress={() => setMealPlanModalVisible(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalActionBtnText}>İptal</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.modalActionBtn, { backgroundColor: '#1A1A1A', flex: 2 }]}
-                onPress={async () => {
-                  if (recipeToPlan) {
-                    await assignRecipeToMealPlan(selectedDay, selectedMealType, recipeToPlan.id, recipeToPlan.title);
-                    setMealPlanModalVisible(false);
-                    Alert.alert("Başarılı!", `Tarif ${selectedDay} günü planına eklendi.`);
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalActionBtnText}>Plana Kaydet</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={profileModalVisible} animationType="fade" transparent={true} onRequestClose={() => setProfileModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { alignItems: 'center', paddingVertical: 24 }]}>
@@ -1236,7 +1151,7 @@ export default function RecipesScreen() {
                 <TouchableOpacity 
                   key={opt.value}
                   style={[styles.modalOptionBtn, collectionFilter === opt.value && styles.activeModalOptionBtn]}
-                  onPress={() => setCollectionFilter(opt.value as any)}
+                  onPress={() => setCollectionFilter(opt.value as 'all' | 'favorites' | 'history')}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.modalOptionText, collectionFilter === opt.value && styles.activeModalOptionText]}>
@@ -1256,7 +1171,7 @@ export default function RecipesScreen() {
                 <TouchableOpacity 
                   key={opt.value}
                   style={[styles.modalOptionBtn, ingredientFilter === opt.value && styles.activeModalOptionBtn]}
-                  onPress={() => setIngredientFilter(opt.value as any)}
+                  onPress={() => setIngredientFilter(opt.value as 'all' | 'complete' | 'missing')}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.modalOptionText, ingredientFilter === opt.value && styles.activeModalOptionText]}>
@@ -1308,7 +1223,7 @@ export default function RecipesScreen() {
                 <Text style={styles.detailTime}>⏱️ Hazırlama / Pişirme Süresi: {selectedRecipe.cookingTime}</Text>
               )}
 
-              {(selectedRecipe as any)?.is_approved && (
+              {selectedRecipe?.is_approved && (
                 <TouchableOpacity 
                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#BFDBFE', marginVertical: 8, justifyContent: 'center' }}
                   onPress={() => {
@@ -1423,20 +1338,6 @@ const styles = StyleSheet.create({
   scrollContent: { paddingTop: 54, paddingHorizontal: 18, paddingBottom: 40 },
   title: { fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 },
   subtitle: { fontSize: 12, color: '#6C757D', marginTop: 2, fontWeight: '600', marginBottom: 12 },
-  
-  // 📅 WİDGET STİLLERİ EKLENDİ
-  widgetContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
-  widgetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  widgetTitle: { fontSize: 13, fontWeight: '900', color: '#1A1A1A' },
-  widgetSubtitle: { fontSize: 10, color: '#6C757D', fontWeight: '700' },
-  widgetDayCard: { width: 110, backgroundColor: '#F8F9FA', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#E9ECEF' },
-  widgetDayName: { fontSize: 11, fontWeight: '800', color: '#1A1A1A', textAlign: 'center', marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#E9ECEF', paddingBottom: 4 },
-  widgetMealRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, height: 20 },
-  widgetMealLabel: { fontSize: 10 },
-  widgetEmptyText: { fontSize: 9, color: '#9CA3AF', fontStyle: 'italic', flex: 1, textAlign: 'right' },
-  widgetMealFilled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', backgroundColor: '#E2E8F0', borderRadius: 4, paddingHorizontal: 4, marginLeft: 4 },
-  widgetMealText: { fontSize: 9, fontWeight: '700', color: '#1A1A1A', flex: 1, marginRight: 2 },
-  widgetDeleteText: { fontSize: 9, color: '#9B1C1C', fontWeight: '900' },
 
   addRecipeBtnHeader: { backgroundColor: '#10B981', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   addRecipeBtnHeaderText: { color: '#FFFFFF', fontWeight: '800', fontSize: 11 },
@@ -1493,7 +1394,6 @@ const styles = StyleSheet.create({
   cartButton: { backgroundColor: '#1A1A1A', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
 
-  // 📄 SAYFALAMA (PAGINATION) STİLLERİ
   paginationContainer: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, marginTop: 6, marginBottom: 14, borderWidth: 1, borderColor: '#E9ECEF', alignItems: 'center' },
   perPageSelectorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
   paginationLabel: { fontSize: 12, fontWeight: '700', color: '#495057', marginRight: 4 },

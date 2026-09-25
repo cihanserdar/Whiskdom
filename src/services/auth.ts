@@ -1,3 +1,4 @@
+import { User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './supabase';
@@ -6,7 +7,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 // Sayfaya dönüldüğünde web tarayıcısını otomatik kapatır
 
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (): Promise<void> => {
   try {
     // Expo Router'a temiz kök adres iletiyoruz
     const redirectUrl = Linking.createURL('');
@@ -39,7 +40,7 @@ export const signInWithGoogle = async () => {
         });
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Google Giriş Hatası:', error);
     throw error;
   }
@@ -93,13 +94,13 @@ export const sendPasswordResetEmail = async (email: string) => {
 };
 
 // Çıkış Yap
-export const signOut = async () => {
+export const signOut = async (): Promise<void> => {
   const { error } = await supabase.auth.signOut();
   if (error) console.error('Çıkış hatası:', error);
 };
 
-// Profil Yoksa Oluştur
-export const ensureUserProfileExists = async (user: any) => {
+// Profil Yoksa Oluştur (Supabase User Tipi ile Tip Güvenli)
+export const ensureUserProfileExists = async (user: User | null): Promise<void> => {
   if (!user) return;
 
   try {

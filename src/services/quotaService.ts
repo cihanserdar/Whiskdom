@@ -1,98 +1,82 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
 
-// 📦 Paket Limitleri Tanımı (Geleceğe yatırım esnek yapı)
+// 📦 Paket Limitleri Tanımı (AI Şef: 5, Fiş: 1)
 export const TIER_LIMITS = {
-  free: { aiRecipeLimit: 3, receiptLimit: 2 },
-  pro: { aiRecipeLimit: 20, receiptLimit: 15 },       // Şimdiki aktif tek ek paket
-  premium: { aiRecipeLimit: 999, receiptLimit: 999 }  // Gelecekteki sınırsız paket
+  free: { aiRecipeLimit: 5, receiptLimit: 1 },
+  pro: { aiRecipeLimit: 20, receiptLimit: 15 },       
+  premium: { aiRecipeLimit: 999, receiptLimit: 999 }  
 };
 
-const QUOTA_STORAGE_KEY = '@whiskdom_user_quota_v1';
-
-interface QuotaData {
-  tier: 'free' | 'pro' | 'premium';
-  aiRecipeUsed: number;
-  receiptUsed: number;
-  lastResetDate: string; // YYYY-MM-DD formatında son sıfırlanma günü
-}
-
-// Bugünün tarihini YYYY-MM-DD olarak al
-const getTodayString = () => {
-  return new Date().toISOString().split('T')[0];
-};
-
-// 1️⃣ Kota Verilerini Çek veya Günün Tarihine Göre Sıfırla
-export async function getUserQuota(): Promise<QuotaData> {
+// 1️⃣ Hak Kontrolü (İstek Atılmadan Önce Çağrılır - 24 Saatlik Kayan Sayaç)
+export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowed: boolean; remaining: number; resetTimeText: string }> {
   try {
-    const stored = await AsyncStorage.getItem(QUOTA_STORAGE_KEY);
-    const today = getTodayString();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { allowed: false, remaining: 0, resetTimeText: '' };
 
-    if (stored) {
-      const data: QuotaData = JSON.parse(stored);
-      // Eğer gün değiştiyse sayaçları sıfırla ve yeni günü kaydet
-      if (data.lastResetDate !== today) {
-        const resetData: QuotaData = {
-          ...data,
-          aiRecipeUsed: 0,
-          receiptUsed: 0,
-          lastResetDate: today,
-        };
-        await AsyncStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(resetData));
-        return resetData;
-      }
-      return data;
-    } else {
-      // İlk kez çalışıyorsa varsayılan 'free' olarak başlat
-      const initialData: QuotaData = {
-        tier: 'free',
-        aiRecipeUsed: 0,
-        receiptUsed: 0,
-        lastResetDate: today,
-      };
-      await AsyncStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(initialData));
-      return initialData;
+    const limit = type === 'aiRecipe' ? TIER_LIMITS.free.aiRecipeLimit : TIER_LIMITS.free.receiptLimit;
+
+    // Dinamik anahtar hatasını önlemek için sabit alanlar üzerinden çekiyoruz
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('ai_chef_quota, ai_chef_reset_at, receipt_quota, receipt_reset_at')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !profile) return { allowed: false, remaining: limit, resetTimeText: '' };
+
+    let currentQuota = type === 'aiRecipe' ? (profile.ai_chef_quota ?? limit) : (profile.receipt_quota ?? limit);
+    let resetAt = type === 'aiRecipe' ? profile.ai_chef_reset_at : profile.receipt_reset_at;
+    const now = new Date();
+
+    // ⏱️ Kayan Sayaç Kontrolü: 24 saatlik süre dolduysa hakları otomatik yenile
+    if (resetAt && new Date(resetAt) <= now) {
+      const updatePayload = type === 'aiRecipe' 
+        ? { ai_chef_quota: limit, ai_chef_reset_at: null }
+        : { receipt_quota: limit, receipt_reset_at: null };
+
+      await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', user.id);
+      
+      currentQuota = limit;
+      resetAt = null;
     }
+
+    const remaining = Math.max(0, currentQuota);
+    const allowed = remaining > 0;
+
+    // Kalan süreyi canlı hesapla
+    let resetTimeText = '';
+    if (resetAt) {
+      const diffMs = new Date(resetAt).getTime() - now.getTime();
+      const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+      resetTimeText = `${String(hours).padStart(2, '0')} Saat ${String(minutes).padStart(2, '0')} Dakika ${String(seconds).padStart(2, '0')} Saniye`;
+    }
+
+    return { allowed, remaining, resetTimeText };
   } catch (error) {
     console.error("Kota okunurken hata:", error);
-    return { tier: 'free', aiRecipeUsed: 0, receiptUsed: 0, lastResetDate: getTodayString() };
+    return { allowed: false, remaining: 0, resetTimeText: '' };
   }
 }
 
-// 2️⃣ Hak Kontrolü (İstek Atılmadan Önce Çağrılır)
-export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowed: boolean; remaining: number; resetTimeText: string }> {
-  const quota = await getUserQuota();
-  const limits = TIER_LIMITS[quota.tier];
-
-  const used = type === 'aiRecipe' ? quota.aiRecipeUsed : quota.receiptUsed;
-  const limit = type === 'aiRecipe' ? limits.aiRecipeLimit : limits.receiptLimit;
-
-  const remaining = Math.max(0, limit - used);
-  const allowed = remaining > 0;
-
-  // Gece yarısına kalan süreyi hesapla (Canlı geri sayım için)
-  const now = new Date();
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const diffMs = tomorrow.getTime() - now.getTime();
-  
-  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-  const resetTimeText = `${String(hours).padStart(2, '0')} Saat ${String(minutes).padStart(2, '0')} Dakika ${String(seconds).padStart(2, '0')} Saniye`;
-
-  return { allowed, remaining, resetTimeText };
-}
-
-// 3️⃣ Hak Tüketme / Düşürme (YALNIZCA İstek BAŞARILI Olunca Çağrılır!)
+// 2️⃣ Hak Tüketme / Düşürme (YALNIZCA Sunucu Tarafındaki RPC Fonksiyonu İle Güvenli Yapılır)
 export async function consumeQuota(type: 'aiRecipe' | 'receipt'): Promise<void> {
   try {
-    const quota = await getUserQuota();
-    const updated: QuotaData = {
-      ...quota,
-      aiRecipeUsed: type === 'aiRecipe' ? quota.aiRecipeUsed + 1 : quota.aiRecipeUsed,
-      receiptUsed: type === 'receipt' ? quota.receiptUsed + 1 : quota.receiptUsed,
-    };
-    await AsyncStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(updated));
+    const featureKey = type === 'aiRecipe' ? 'aiRecipe' : 'receipt';
+
+    // İşlemi doğrudan PostgreSQL tarafındaki güvenli fonksiyona devrediyoruz
+    const { error } = await supabase.rpc('consume_quota_safely', {
+      feature_type: featureKey
+    });
+
+    if (error) {
+      console.error("Sunucu tarafı kota düşürme hatası:", error);
+    }
   } catch (error) {
     console.error("Kota düşürülürken hata:", error);
   }

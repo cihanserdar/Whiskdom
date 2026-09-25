@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { AppContext } from '../context/AppContext';
 import { sendPasswordResetEmail } from '../services/auth';
-import { sendBadgeUnlockedNotification, sendInstantTestNotification } from '../services/notificationService';
+import { sendBadgeUnlockedNotification } from '../services/notificationService';
 import { supabase } from '../services/supabase';
 
 const AVAILABLE_DIETS = ['Vegan', 'Vejetaryen', 'Ketojenik', 'Glutensiz', 'Rafine Şekersiz', 'Yüksek Protein'];
@@ -44,7 +44,6 @@ export default function ProfileScreen() {
   const favorites = context?.favorites || [];
   const history = context?.history || [];
   const wasteStats = context?.wasteStats || { savedCount: 0, wastedCount: 0 };
-  const resetAllData = context?.resetAllData || (() => Promise.resolve());
   const logout = context?.logout || (() => {});
   const isPasswordRecovery = context?.isPasswordRecovery || false;
   const setIsPasswordRecovery = context?.setIsPasswordRecovery || (() => {});
@@ -134,7 +133,7 @@ export default function ProfileScreen() {
           }
         }
       } catch (err) {
-        console.log('Supabase senkronizasyon hatası:', err);
+        // Sessizce geçilir
       }
     };
 
@@ -226,7 +225,7 @@ export default function ProfileScreen() {
         }
         await AsyncStorage.setItem(NOTIFIED_BADGES_KEY, JSON.stringify(notifiedList));
       } catch (error) {
-        console.log('Rozet bildirim kontrolü hatası:', error);
+        // Sessizce geçilir
       }
     };
 
@@ -249,15 +248,6 @@ export default function ProfileScreen() {
 
     setSelectedBadge(null);
     Alert.alert("Unvan Güncellendi! 👑", `Yeni şef unvanınız: ${badge.grantsTitle}`);
-  };
-
-  const handleTestNotification = async () => {
-    const success = await sendInstantTestNotification();
-    if (success) {
-      Alert.alert("Test Başlatıldı 🔔", "2 saniye içinde bildirim cihazınıza düşecektir.");
-    } else {
-      Alert.alert("Bilgilendirme", "Expo Go ortamında push bildirimler kısıtlıdır.");
-    }
   };
 
   const handleSupportEmail = () => {
@@ -290,7 +280,7 @@ export default function ProfileScreen() {
       }
 
       const isGoogleUser = user?.app_metadata?.provider === 'google' || 
-                           user?.app_metadata?.providers?.includes('google');
+                         user?.app_metadata?.providers?.includes('google');
 
       if (isGoogleUser) {
         Alert.alert(
@@ -306,8 +296,9 @@ export default function ProfileScreen() {
                   if (!emailToSend) throw new Error("E-posta adresi bulunamadı.");
                   await sendPasswordResetEmail(emailToSend);
                   Alert.alert("E-posta Gönderildi 📩", "Lütfen e-posta kutunuzu kontrol edin ve gelen bağlantıya tıklayın.");
-                } catch (err: any) {
-                  Alert.alert("Hata ❌", err.message || "Bağlantı gönderilemedi.");
+                } catch (err: unknown) {
+                  const errorMsg = err instanceof Error ? err.message : "Bağlantı gönderilemedi.";
+                  Alert.alert("Hata ❌", errorMsg);
                 }
               }
             }
@@ -338,8 +329,9 @@ export default function ProfileScreen() {
       setNewPassword('');
       setIsPasswordRecovery(false); 
       Alert.alert("Başarılı 🔒", "Şifreniz güvenli bir şekilde güncellendi.");
-    } catch (error: any) {
-      Alert.alert("Hata ❌", error.message || "Şifre güncellenirken bir sorun oluştu.");
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : "Şifre güncellenirken bir sorun oluştu.";
+      Alert.alert("Hata ❌", errorMsg);
     }
   };
 
@@ -356,7 +348,7 @@ export default function ProfileScreen() {
             logout();
           } 
         }
-      ]
+      ] 
     );
   };
 
@@ -376,25 +368,6 @@ export default function ProfileScreen() {
       ? allergens.filter(a => a !== allergen)
       : [...allergens, allergen];
     setUserPreferences({ ...userPreferences, allergens: updatedAllergens });
-  };
-
-  const handleResetApp = () => {
-    Alert.alert(
-      "Sıfırlama Onayı",
-      "Tüm envanter, favoriler, sepet ve istatistikler silinecek. Emin misiniz?",
-      [
-        { text: "İptal", style: "cancel" },
-        { 
-          text: "Sıfırla", 
-          style: "destructive", 
-          onPress: async () => {
-            await resetAllData();
-            await AsyncStorage.removeItem(NOTIFIED_BADGES_KEY);
-            Alert.alert("Tamamlandı", "Tüm veriler varsayılan duruma sıfırlandı.");
-          } 
-        }
-      ]
-    );
   };
 
   // 👑 GÜVENLİ ÖDEME (CHECKOUT) İŞLEMİ VE PRO'YA GEÇİŞ
@@ -606,16 +579,6 @@ export default function ProfileScreen() {
           {userPreferences.allergens?.length > 0 ? `Alerjenler: ${userPreferences.allergens.join(', ')}` : 'Alerjen kısıtlaması seçilmedi.'}
         </Text>
       </View>
-
-      {/* AYARLAR & TEST */}
-      <Text style={styles.sectionHeader}>⚙️ Uygulama Ayarları & Test</Text>
-      <TouchableOpacity style={styles.testButton} onPress={handleTestNotification} activeOpacity={0.8}>
-        <Text style={styles.testButtonText}>🔔 SKT Bildirimini Test Et (2 Sn)</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.dangerButton} onPress={handleResetApp} activeOpacity={0.8}>
-        <Text style={styles.dangerButtonText}>🗑️ Tüm Verileri Varsayılana Sıfırla</Text>
-      </TouchableOpacity>
 
       {/* DESTEK, GÜVENLİK VE ÇIKIŞ YAP */}
       <Text style={styles.sectionHeader}>📞 Destek & Güvenlik</Text>
@@ -1027,12 +990,6 @@ const styles = StyleSheet.create({
   activeModalOptionBtn: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
   modalOptionText: { fontSize: 12, color: '#4A5568', fontWeight: '600' },
   activeModalOptionText: { color: '#FFFFFF', fontWeight: '800' },
-
-  testButton: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
-  testButtonText: { color: '#1A1A1A', fontWeight: '700', fontSize: 13 },
-
-  dangerButton: { backgroundColor: '#FCE8E6', borderWidth: 1, borderColor: '#F87171', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
-  dangerButtonText: { color: '#9B1C1C', fontWeight: '700', fontSize: 13 },
 
   menuGroupCard: { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 16, elevation: 1 },
   menuItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },

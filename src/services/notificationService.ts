@@ -1,4 +1,5 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { InventoryItem } from '../context/AppContext';
 
 // Uygulamanın Expo Go'da çalışıp çalışmadığını kontrol et
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -18,44 +19,13 @@ if (!isExpoGo) {
       }),
     });
   } catch (error) {
-    console.log('Notification handler başlatılamadı:', error);
+    // Kritik handler hatası sessizce geçilir veya hata yakalama mekanizmasına bağlanabilir
   }
 }
 
-// Anlık Test Bildirimi
-export const sendInstantTestNotification = async (): Promise<boolean> => {
-  if (isExpoGo || !Notifications) {
-    console.log('Expo Go: Test bildirimi simüle edildi.');
-    return true;
-  }
-
-  try {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') return false;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Mutfak Asistanı 🍏',
-        body: 'Bu bir test bildirimidir. Son kullanma tarihi yaklaşan ürünleriniz burada görünecek!',
-        sound: true,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 2,
-      },
-    });
-
-    return true;
-  } catch (error) {
-    console.log('Test bildirimi hatası:', error);
-    return false;
-  }
-};
-
 // SKT Bildirimlerini Planlama
-export const scheduleExpiryNotifications = async (inventoryItems: any[]) => {
+export const scheduleExpiryNotifications = async (inventoryItems: InventoryItem[]) => {
   if (isExpoGo || !Notifications) {
-    console.log('Expo Go: SKT bildirimleri simüle edildi.');
     return;
   }
 
@@ -97,14 +67,13 @@ export const scheduleExpiryNotifications = async (inventoryItems: any[]) => {
       }
     }
   } catch (error) {
-    console.log('SKT bildirim planlama hatası:', error);
+    // Bildirim planlama hatası
   }
 };
 
 // Rozet ve Unvan Kazanma Bildirimi
 export const sendBadgeUnlockedNotification = async (badgeName: string, titleName: string) => {
   if (isExpoGo || !Notifications) {
-    console.log(`Expo Go: Rozet bildirimi simüle edildi -> ${badgeName} / ${titleName}`);
     return;
   }
 
@@ -124,6 +93,6 @@ export const sendBadgeUnlockedNotification = async (badgeName: string, titleName
       },
     });
   } catch (error) {
-    console.log('Rozet bildirimi gönderilemedi:', error);
+    // Rozet bildirim hatası
   }
 };
