@@ -23,7 +23,6 @@ interface RequestPayload {
 }
 
 serve(async (req) => {
-  // CORS ön uçuş (preflight) istekleri için
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -39,7 +38,6 @@ serve(async (req) => {
     let contents: GeminiContent[] = []
 
     if (base64Image) {
-      // Görsel ve metin içeren istek (Fiş / Galeri taraması)
       contents = [
         {
           parts: [
@@ -54,7 +52,6 @@ serve(async (req) => {
         }
       ]
     } else {
-      // Sadece metin içeren istek (Tarif üretme vb.)
       contents = [
         {
           parts: [{ text: prompt || '' }]
@@ -62,13 +59,18 @@ serve(async (req) => {
       ]
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
+    // Kararlı ve hatasız çalışan model kimliği
+    const apiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents })
-    })
+    });
 
-    const data = await response.json()
+    const data = await apiResponse.json();
+
+    if (!apiResponse.ok) {
+      throw new Error(data?.error?.message || `Google API Hatası: ${JSON.stringify(data)}`);
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

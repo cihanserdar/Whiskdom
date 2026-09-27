@@ -18,7 +18,8 @@ export interface InventoryItem {
   id: string;
   name: string;
   brand?: string;
-  quantity: string;
+  amount: number;
+  unit: string;
   expiryDate: string;
   imageUrl?: string;
   category?: string;
@@ -59,6 +60,12 @@ export interface CreatorProfileData {
   xp: number;
 }
 
+export interface RecipeIngredient {
+  name: string;
+  amount: number;
+  unit: string;
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -66,6 +73,7 @@ export interface Recipe {
   category?: string;
   mainIngredient: string;
   ingredients: string[];
+  ingredientsStructured?: RecipeIngredient[];
   ingredientsWithQuantities?: string[];
   cookingTime?: string;
   instructions?: string[];
@@ -246,7 +254,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (mounted) {
           if (session?.user) {
             setUser(session.user);
-            await fetchUserData(session.user);
+            await fetchUserData(session.user, () => mounted);
           } else {
             setUser(null);
             setLoading(false);
@@ -267,7 +275,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         if (session?.user) {
           setUser(session.user);
-          await fetchUserData(session.user);
+          await fetchUserData(session.user, () => mounted);
         } else {
           setUser(null);
           setLoading(false);
@@ -294,21 +302,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (data) {
         const formattedRecipes: Recipe[] = data.map((r: Record<string, unknown>) => {
           let parsedIngredients: string[] = [];
+          let parsedStructured: RecipeIngredient[] = [];
           let parsedQuantities: string[] = [];
 
           const rawIngredients = r.ingredients;
           if (Array.isArray(rawIngredients)) {
-            parsedIngredients = rawIngredients.map((ing: unknown) =>
-              typeof ing === 'string' ? ing : (ing as Record<string, string>)?.name || ''
-            );
+            parsedIngredients = rawIngredients.map((ing: unknown) => {
+              if (typeof ing === 'string') return ing;
+              const itemObj = ing as Record<string, unknown>;
+              return String(itemObj?.name || '');
+            });
+
+            parsedStructured = rawIngredients.map((ing: unknown) => {
+              if (typeof ing === 'string') {
+                return { name: ing, amount: 1, unit: 'adet' };
+              }
+              const itemObj = ing as Record<string, unknown>;
+              return {
+                name: String(itemObj?.name || ''),
+                amount: Number(itemObj?.amount || 1),
+                unit: String(itemObj?.unit || 'adet')
+              };
+            });
             
             parsedQuantities = rawIngredients.map((ing: unknown) => {
               if (typeof ing === 'string') return ing;
-              const itemObj = ing as Record<string, string>;
-              if (itemObj?.quantity && itemObj?.name && itemObj.quantity.toLowerCase().includes(itemObj.name.toLowerCase())) {
-                return itemObj.quantity;
+              const itemObj = ing as Record<string, unknown>;
+              const amt = itemObj?.amount;
+              const unt = itemObj?.unit;
+              const nam = itemObj?.name;
+              if (amt !== undefined && unt !== undefined) {
+                return `${amt} ${unt} ${nam || ''}`.trim();
               }
-              return itemObj?.quantity ? `${itemObj.quantity} ${itemObj.name || ''}`.trim() : (itemObj?.name || '');
+              return String(nam || '');
             });
           }
 
@@ -319,6 +345,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             category: String(r.category || 'Ana Yemek'),
             mainIngredient: parsedIngredients[0] || 'Genel',
             ingredients: parsedIngredients,
+            ingredientsStructured: parsedStructured,
             ingredientsWithQuantities: parsedQuantities,
             cookingTime: String(r.cook_time || r.prep_time || '20 Dk'),
             instructions: Array.isArray(r.instructions) ? r.instructions.map(String) : [],
@@ -359,6 +386,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const creatorName = profileData?.name || 'Topluluk Şefi';
       const creatorTitle = profileData?.title || '🌟 Gurme Şef';
 
+      // Gelen malzemeleri garantiye alalım (Düz metin veya structured fark etmez)
+      const rawIngList = recipe.ingredientsWithQuantities && recipe.ingredientsWithQuantities.length > 0
+        ? recipe.ingredientsWithQuantities
+        : recipe.ingredients || [];
+
+      const structuredIngredients = rawIngList.map((item) => {
+        if (typeof item === 'string') {
+          return { name: item, amount: 1, unit: 'adet' };
+        }
+        const obj = item as Record<string, unknown>;
+        return {
+          name: String(obj?.name || 'Malzeme'),
+          amount: Number(obj?.amount || 1),
+          unit: String(obj?.unit || 'adet')
+        };
+      });
+
       const { error } = await supabase
         .from('recipes')
         .insert([{
@@ -370,10 +414,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           category: recipe.category || 'Ana Yemek',
           cook_time: recipe.cookingTime || '20 Dk',
           prep_time: recipe.cookingTime || '20 Dk',
-          ingredients: (recipe.ingredientsWithQuantities || []).map((item, idx) => ({
-            name: recipe.ingredients[idx] || item,
-            quantity: item
-          })),
+          ingredients: structuredIngredients,
           instructions: recipe.instructions || [],
           diets: recipe.diets || [],
           allergens: recipe.allergens || [],
@@ -407,8 +448,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const fetchUserData = async (currentUser: User) => {
-    setLoading(true);
+  const fetchUserData = async (currentUser: User, isMounted: () => boolean) => {
+    if (isMounted()) setLoading(true);
     try {
       await ensureUserProfileExists(currentUser);
       await fetchRecipesFromSupabase();
@@ -419,7 +460,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', currentUser.id)
         .single();
 
-      if (profileData) {
+      if (profileData && isMounted()) {
         setUserProfileState({
           name: profileData.name || 'Şef Kullanıcı',
           email: profileData.email || currentUser.email || '',
@@ -439,12 +480,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
 
-      if (inventoryData) {
+      if (inventoryData && isMounted()) {
         const formatted: InventoryItem[] = inventoryData.map((item: Record<string, unknown>) => ({
           id: String(item.id),
           name: String(item.name || ''),
           brand: item.brand ? String(item.brand) : undefined,
-          quantity: String(item.quantity || ''),
+          amount: Number(item.amount || 0),
+          unit: String(item.unit || 'adet'),
           expiryDate: String(item.expiry_date || ''),
           imageUrl: item.image_url ? String(item.image_url) : undefined,
           category: item.category ? String(item.category) : undefined,
@@ -459,7 +501,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', currentUser.id)
         .single();
 
-      if (statsData) {
+      if (statsData && isMounted()) {
         setWasteStats({
           savedCount: Number(statsData.saved_count || 0),
           wastedCount: Number(statsData.wasted_count || 0),
@@ -467,24 +509,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const storedCart = await AsyncStorage.getItem(CART_STORAGE_KEY);
-      if (storedCart) setCart(JSON.parse(storedCart));
+      if (storedCart && isMounted()) setCart(JSON.parse(storedCart));
 
       const storedMealPlan = await AsyncStorage.getItem(MEAL_PLAN_STORAGE_KEY);
-      if (storedMealPlan) setMealPlan(JSON.parse(storedMealPlan));
+      if (storedMealPlan && isMounted()) setMealPlan(JSON.parse(storedMealPlan));
 
       const storedFavs = await AsyncStorage.getItem(FAVORITES_STORAGE_KEY);
-      if (storedFavs) setFavorites(JSON.parse(storedFavs));
+      if (storedFavs && isMounted()) setFavorites(JSON.parse(storedFavs));
 
       const storedHist = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
-      if (storedHist) setHistory(JSON.parse(storedHist));
+      if (storedHist && isMounted()) setHistory(JSON.parse(storedHist));
 
       const storedThreshold = await AsyncStorage.getItem(THRESHOLD_STORAGE_KEY);
-      if (storedThreshold) setExpiryThresholdState(Number(storedThreshold));
+      if (storedThreshold && isMounted()) setExpiryThresholdState(Number(storedThreshold));
 
     } catch (error: unknown) {
       // Sessizce geçilir
     } finally {
-      setLoading(false);
+      if (isMounted()) setLoading(false);
     }
   };
 
@@ -502,7 +544,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       user_id: user.id,
       name: toTitleCase(item.name),
       brand: item.brand ? toTitleCase(item.brand) : 'Genel',
-      quantity: item.quantity,
+      amount: Number(item.amount || 0),
+      unit: item.unit || 'adet',
       expiry_date: item.expiryDate,
       image_url: item.imageUrl,
       category: item.category,
@@ -519,7 +562,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         id: String(data.id),
         name: String(data.name),
         brand: data.brand ? String(data.brand) : undefined,
-        quantity: String(data.quantity),
+        amount: Number(data.amount || 0),
+        unit: String(data.unit || 'adet'),
         expiryDate: String(data.expiry_date),
         imageUrl: data.image_url ? String(data.image_url) : undefined,
         category: data.category ? String(data.category) : undefined,
@@ -547,7 +591,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       .update({
         name: toTitleCase(updatedItem.name),
         brand: updatedItem.brand ? toTitleCase(updatedItem.brand) : 'Genel',
-        quantity: updatedItem.quantity,
+        amount: Number(updatedItem.amount || 0),
+        unit: updatedItem.unit || 'adet',
         expiry_date: updatedItem.expiryDate,
         image_url: updatedItem.imageUrl,
         category: updatedItem.category,
@@ -571,7 +616,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       user_id: user.id,
       name: toTitleCase(item.name || 'Bilinmeyen Ürün'),
       brand: item.brand ? toTitleCase(item.brand) : 'Genel',
-      quantity: item.quantity || '1 Adet',
+      amount: Number(item.amount || 1),
+      unit: item.unit || 'Adet',
       expiry_date: item.expiryDate || '15-10-2026',
       image_url: item.imageUrl || '',
       category: item.category || detectCategory(item.name || ''),
@@ -592,7 +638,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         id: String(d.id),
         name: String(d.name || ''),
         brand: d.brand ? String(d.brand) : undefined,
-        quantity: String(d.quantity || ''),
+        amount: Number(d.amount || 0),
+        unit: String(d.unit || 'adet'),
         expiryDate: String(d.expiry_date || ''),
         imageUrl: d.image_url ? String(d.image_url) : undefined,
         category: d.category ? String(d.category) : undefined,
@@ -729,20 +776,85 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const toggleHistory = async (recipeId: string, ingredientsCount: number = 3) => {
-    let updated: string[];
+    let updatedHistory: string[];
     let newStats = { ...wasteStats };
 
+    const recipeToCook = recipes.find(r => r.id === recipeId);
+
     if (history.includes(recipeId)) {
-      updated = history.filter(id => id !== recipeId);
+      updatedHistory = history.filter(id => id !== recipeId);
       newStats.savedCount = Math.max(0, newStats.savedCount - ingredientsCount);
     } else {
-      updated = [recipeId, ...history];
+      updatedHistory = [recipeId, ...history];
       newStats.savedCount += ingredientsCount;
+
+      if (recipeToCook && recipeToCook.ingredientsStructured && recipeToCook.ingredientsStructured.length > 0 && user) {
+        let currentInventory = [...inventory];
+
+        for (const reqIng of recipeToCook.ingredientsStructured) {
+          const reqNameNormalized = reqIng.name.toLocaleLowerCase('tr-TR').trim();
+          let neededAmount = reqIng.amount;
+          const reqUnit = reqIng.unit.toLocaleLowerCase('tr-TR').trim();
+
+          const matchingItems = currentInventory
+            .filter(item => item.name.toLocaleLowerCase('tr-TR').trim() === reqNameNormalized)
+            .sort((a, b) => {
+              const dateA = a.expiryDate ? parseTRDate(a.expiryDate).getTime() : 0;
+              const dateB = b.expiryDate ? parseTRDate(b.expiryDate).getTime() : 0;
+              return dateA - dateB;
+            });
+
+          for (const invItem of matchingItems) {
+            if (neededAmount <= 0) break;
+
+            const invUnit = invItem.unit.toLocaleLowerCase('tr-TR').trim();
+            let availableAmount = invItem.amount;
+
+            if (
+              (reqUnit.includes('ml') && invUnit.includes('litre')) ||
+              (reqUnit.includes('gram') && invUnit.includes('kg'))
+            ) {
+              availableAmount *= 1000;
+            } else if (
+              (reqUnit.includes('litre') && invUnit.includes('ml')) ||
+              (reqUnit.includes('kg') && invUnit.includes('gram'))
+            ) {
+              availableAmount /= 1000;
+            }
+
+            if (availableAmount >= neededAmount) {
+              const remainder = availableAmount - neededAmount;
+              let updatedAmount = remainder;
+              if (
+                (reqUnit.includes('ml') && invUnit.includes('litre')) ||
+                (reqUnit.includes('gram') && invUnit.includes('kg'))
+              ) {
+                updatedAmount /= 1000;
+              }
+
+              if (updatedAmount <= 0.001) {
+                await supabase.from('inventory').delete().eq('id', invItem.id);
+                currentInventory = currentInventory.filter(i => i.id !== invItem.id);
+              } else {
+                await supabase.from('inventory').update({ amount: updatedAmount }).eq('id', invItem.id);
+                currentInventory = currentInventory.map(i => i.id === invItem.id ? { ...i, amount: updatedAmount } : i);
+              }
+              neededAmount = 0;
+            } else {
+              neededAmount -= availableAmount;
+              await supabase.from('inventory').delete().eq('id', invItem.id);
+              currentInventory = currentInventory.filter(i => i.id !== invItem.id);
+            }
+          }
+        }
+        setInventoryState(currentInventory);
+        safeScheduleNotifications(currentInventory);
+      }
     }
 
-    setHistory(updated);
+    setHistory(updatedHistory);
     setWasteStats(newStats);
-    await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updatedHistory));
 
     if (user) {
       await supabase.from('waste_stats').update({

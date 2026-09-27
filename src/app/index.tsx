@@ -22,13 +22,14 @@ import { supabase } from '../services/supabase'; // 🔒 Güvenli Supabase istem
 
 const BRAND_SUGGESTIONS = ['Torku', 'Sütaş', 'İçim', 'Pınar', 'Öncü', 'Filiz', 'Tadım', 'Banvit', 'Reis', 'Söke', 'Komili'];
 const PRODUCT_SUGGESTIONS = ['Çikolata', 'Süt', 'Yumurta', 'Kaşar Peyniri', 'Yoğurt', 'Tereyağı', 'Domates', 'Kuru Soğan', 'Salça', 'Makarna', 'Kıyma'];
-const UNITS = ['Adet', 'Kg', 'Gram', 'Litre', 'Paket', 'Kavanoz', 'Baş'];
+const UNITS = ['Adet', 'Kg', 'Gram', 'Litre', 'Ml', 'Paket', 'Kavanoz', 'Baş'];
 
 interface ScannedReceiptItem {
   id: string;
   name: string;
   brand: string;
-  quantity: string;
+  amount: number;
+  unit: string;
   selected: boolean;
 }
 
@@ -56,6 +57,22 @@ const parseTRDate = (dateStr: string): Date | null => {
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// Yardımcı: Metin miktar ifadesini (örn. "1 Litre" veya "500g") sayı ve birime ayırır
+const parseQuantityString = (qtyStr: string): { amount: number; unit: string } => {
+  if (!qtyStr) return { amount: 1, unit: 'Adet' };
+  const cleaned = qtyStr.trim();
+  const match = cleaned.match(/^([\d.,]+)\s*(.*)$/);
+  if (match) {
+    const parsedNum = parseFloat(match[1].replace(',', '.'));
+    const parsedUnit = match[2].trim() || 'Adet';
+    return {
+      amount: isNaN(parsedNum) ? 1 : parsedNum,
+      unit: parsedUnit.charAt(0).toUpperCase() + parsedUnit.slice(1).toLowerCase(),
+    };
+  }
+  return { amount: 1, unit: 'Adet' };
+};
+
 export default function HomeScreen() {
   const [isReady, setIsReady] = useState(true);
   const context = useContext(AppContext);
@@ -75,7 +92,7 @@ export default function HomeScreen() {
 
   const [formName, setFormName] = useState('');
   const [formBrand, setFormBrand] = useState('');
-  const [formQuantityNum, setFormQuantityNum] = useState('1');
+  const [formAmountNum, setFormAmountNum] = useState('1');
   const [formUnit, setFormUnit] = useState('Adet');
   const [formExpiryDate, setFormExpiryDate] = useState('15-10-2026');
   const [formImageUrl, setFormImageUrl] = useState('');
@@ -117,13 +134,12 @@ export default function HomeScreen() {
       const quotaStatus = await checkQuota('receipt');
       setRemainingReceiptQuota(quotaStatus.remaining);
     } catch (e) {
-      console.error('Kota çekilemedi:', e);
+      // Sessizce geçilir
     }
   };
 
   // AKILLI YENİDEN DENEME MEKANİZMALI GEMINI ANALİZİ (SUPABASE EDGE FUNCTION ÜZERİNDEN)
   const analyzeReceiptWithGemini = async (base64Image: string, imageUri: string) => {
-    // 1. İSTEK ÖNCESİ SUNUCU TARAFI KOTA KONTROLÜ
     try {
       const quotaStatus = await checkQuota('receipt');
 
@@ -135,7 +151,7 @@ export default function HomeScreen() {
         return;
       }
     } catch (e) {
-      console.error('Kota kontrol hatası:', e);
+      // Sessizce geçilir
     }
 
     setReceiptImageUri(imageUri);
@@ -150,7 +166,6 @@ export default function HomeScreen() {
       try {
         const prompt = 'Bu alışveriş fişi veya gıda listesi fotoğrafındaki ürünleri tespit et. Sadece şu JSON formatında cevap ver: [{"name": "Ürün Adı", "brand": "Marka", "quantity": "Miktar (örn: 1 Litre, 2 Adet)"}]. Başka hiçbir açıklama yazma.';
 
-        // Doğrudan Supabase Edge Function çağrısı
         const { data, error } = await supabase.functions.invoke('generate-recipe', {
           body: { 
             prompt: prompt,
@@ -172,28 +187,30 @@ export default function HomeScreen() {
             const jsonString = responseText.substring(jsonStart, jsonEnd);
             const parsedData = JSON.parse(jsonString);
 
-            const formattedItems: ScannedReceiptItem[] = (parsedData as Array<{ name?: string; brand?: string; quantity?: string }>).map((item, idx) => ({
-              id: `gemini_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
-              name: item.name || 'Bilinmeyen Ürün',
-              brand: item.brand || '',
-              quantity: item.quantity || '1 Adet',
-              selected: true,
-            }));
+            const formattedItems: ScannedReceiptItem[] = (parsedData as Array<{ name?: string; brand?: string; quantity?: string }>).map((item, idx) => {
+              const parsedQty = parseQuantityString(item.quantity || '1 Adet');
+              return {
+                id: `gemini_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+                name: item.name || 'Bilinmeyen Ürün',
+                brand: item.brand || '',
+                amount: parsedQty.amount,
+                unit: parsedQty.unit,
+                selected: true,
+              };
+            });
 
             setReceiptItems(formattedItems);
             setIsAnalyzing(false);
             
-            // 2. BAŞARILI SONUÇ DÖNDÜĞÜ AN VERİTABANINDA KOTAYI 1 DÜŞÜR VE SAYACI BAŞLAT
             await consumeQuota('receipt');
             updateReceiptQuota();
             return;
           }
         }
         break;
-      } catch (error: unknown) {
+      } catch (error) {
         attempt++;
         if (attempt >= maxRetries) {
-          console.error('Gemini API Hatası:', error);
           Alert.alert('Hata', 'Google Gemini AI analizinde bir hata oluştu. Lütfen birkaç saniye bekleyip tekrar deneyin.');
           setIsAnalyzing(false);
           break;
@@ -261,7 +278,8 @@ export default function HomeScreen() {
       id: `${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
       name: item.name,
       brand: item.brand,
-      quantity: item.quantity,
+      amount: item.amount,
+      unit: item.unit,
       expiryDate: '15-10-2026',
     }));
 
@@ -338,9 +356,8 @@ export default function HomeScreen() {
       setSelectedItemId(item.id);
       setFormName(item.name);
       setFormBrand(item.brand || '');
-      const parts = item.quantity.split(' ');
-      setFormQuantityNum(parts[0] || '1');
-      setFormUnit(parts[1] || 'Adet');
+      setFormAmountNum(item.amount?.toString() || '1');
+      setFormUnit(item.unit || 'Adet');
       setFormExpiryDate(item.expiryDate || '15-10-2026');
       setFormImageUrl(item.imageUrl || '');
 
@@ -357,7 +374,7 @@ export default function HomeScreen() {
       setSelectedItemId(null);
       setFormName('');
       setFormBrand('');
-      setFormQuantityNum('1');
+      setFormAmountNum('1');
       setFormUnit('Adet');
       setFormExpiryDate('15-10-2026');
       setSelectedDateObj(new Date());
@@ -384,7 +401,8 @@ export default function HomeScreen() {
 
   const handleSave = () => {
     if (!formName.trim()) return;
-    const fullQuantity = `${formQuantityNum} ${formUnit}`;
+
+    const numericAmount = parseFloat(formAmountNum.replace(',', '.')) || 1;
 
     const nutrients = {
       calories: Number(formCalories) || 0,
@@ -398,7 +416,8 @@ export default function HomeScreen() {
         id: selectedItemId,
         name: formName,
         brand: formBrand,
-        quantity: fullQuantity,
+        amount: numericAmount,
+        unit: formUnit,
         expiryDate: formExpiryDate,
         imageUrl: formImageUrl,
         ...(nutrients.calories > 0 ? { nutrients } : {}),
@@ -408,7 +427,8 @@ export default function HomeScreen() {
         id: Date.now().toString(),
         name: formName,
         brand: formBrand,
-        quantity: fullQuantity,
+        amount: numericAmount,
+        unit: formUnit,
         expiryDate: formExpiryDate,
         imageUrl: formImageUrl,
         ...(nutrients.calories > 0 ? { nutrients } : {}),
@@ -590,7 +610,7 @@ export default function HomeScreen() {
                   {item.brand ? <Text style={styles.itemBrand}>{item.brand}</Text> : null}
 
                   <View style={styles.metaRow}>
-                    <Text style={styles.itemQuantity}>Miktar: {item.quantity}</Text>
+                    <Text style={styles.itemQuantity}>Miktar: {item.amount} {item.unit}</Text>
                     {item.expiryDate ? <Text style={styles.expiryDateText}>• SKT: {item.expiryDate}</Text> : null}
                   </View>
                 </View>
@@ -665,7 +685,7 @@ export default function HomeScreen() {
                       <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{item.name}</Text>
                         <Text style={{ fontSize: 11, color: '#6C757D' }}>
-                          {item.brand ? `${item.brand} • ` : ''}{item.quantity}
+                          {item.brand ? `${item.brand} • ` : ''}{item.amount} {item.unit}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -767,8 +787,8 @@ export default function HomeScreen() {
                 <View style={styles.quantityRow}>
                   <TextInput
                     style={[styles.modalInput, { width: 70 }]}
-                    value={formQuantityNum}
-                    onChangeText={setFormQuantityNum}
+                    value={formAmountNum}
+                    onChangeText={setFormAmountNum}
                     keyboardType="numeric"
                   />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>

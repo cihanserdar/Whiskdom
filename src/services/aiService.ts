@@ -1,5 +1,5 @@
 import { UserPreferences } from '../context/AppContext';
-import { supabase } from './supabase'; // Supabase istemcinin olduğu dosya
+import { supabase } from './supabase';
 
 export interface AIRecipeResult {
   title: string;
@@ -14,7 +14,7 @@ export interface ScannedItem {
   name: string;
   brand?: string;
   quantity: string;
-  expiryDate: string; // "DD-MM-YYYY" formatında
+  expiryDate: string;
 }
 
 export interface UserRecipeInput {
@@ -26,7 +26,47 @@ export interface UserRecipeInput {
   rawInstructions: string;
 }
 
-// 1. AI Tarif Üretici (Supabase Edge Function üzerinden)
+// Güvenli JSON Ayıklama Yardımcı Fonksiyonu
+const safeJsonParse = (text: string) => {
+  try {
+    const cleanedText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const jsonStartIndex = cleanedText.indexOf('{') !== -1 ? cleanedText.indexOf('{') : cleanedText.indexOf('[');
+    const jsonEndIndex = cleanedText.lastIndexOf('}') !== -1 ? cleanedText.lastIndexOf('}') : cleanedText.lastIndexOf(']');
+    
+    if (jsonStartIndex !== -1 && jsonEndIndex !== -1 && jsonEndIndex > jsonStartIndex) {
+      const jsonString = cleanedText.substring(jsonStartIndex, jsonEndIndex + 1);
+      return JSON.parse(jsonString);
+    }
+    return JSON.parse(cleanedText);
+  } catch (err) {
+    console.error("JSON Parse Hatası. Ham metin:", text);
+    return null;
+  }
+};
+
+// Edge Function'dan gelen yanıtı her ihtimale karşı güvenli ayıklama
+const extractResponseText = (data: any): string | null => {
+  if (!data) return null;
+  // 1. Supabase Function doğrudan string döndüyse
+  if (typeof data === 'string') return data;
+  // 2. Google Gemini standart candidates yapısı
+  if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  // 3. Düz text alanı varsa
+  if (data?.text) return data.text;
+  // 4. Eğer data doğrudan nesneyse ve içinde text varsa
+  if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content;
+  
+  // Hiçbiri tutmazsa stringe çevirip denetelim
+  try {
+    return JSON.stringify(data);
+  } catch (e) {
+    return null;
+  }
+};
+
+// 1. AI Tarif Üretici
 export const generateRecipeWithAI = async (
   ingredients: string[], 
   preferences?: UserPreferences,
@@ -72,11 +112,9 @@ Format şu şekilde olsun:
 
     if (error) throw error;
 
-    // Supabase Edge Function'dan dönen Gemini yanıtını işliyoruz
-    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+    const textResponse = extractResponseText(data);
     if (textResponse) {
-      const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(jsonString);
+      return safeJsonParse(textResponse);
     }
   } catch (error) {
     console.error("AI Tarif Hatası:", error);
@@ -90,10 +128,10 @@ export const scanImageWithAI = async (base64Image: string): Promise<ScannedItem[
 Fotoğraftaki gıda/mutfak ürünlerini tespit et.
 
 Her ürün için:
-1. "name": Ürün adı (Örn: Tam Yağlı Süt)
-2. "brand": Ürün markası (eğer görünüyorsa, yoksa "Genel")
-3. "quantity": Miktarı/Ağırlığı (Örn: 1 Litre, 500 Gram, 2 Adet)
-4. "expiryDate": Eğer ambalajda/fişte SKT tarihi varsa "DD-MM-YYYY" (Örn: "25-10-2026") formatında yaz. Görünmüyorsa ürünün yapısına uygun mantıklı bir gelecek tarih ver (Sebze için 7 gün, süt ürünü için 15 gün, bakliyat için 1 yıl sonrası).
+1. "name": Ürün adı
+2. "brand": Ürün markası (yoksa "Genel")
+3. "quantity": Miktarı/Ağırlığı
+4. "expiryDate": SKT tarihi "DD-MM-YYYY" formatında. Görünmüyorsa mantıklı bir gelecek tarih ver.
 
 Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçbir metin yazma.
 Örnek format:
@@ -116,10 +154,9 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
 
     if (error) throw error;
 
-    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+    const textResponse = extractResponseText(data);
     if (textResponse) {
-      const jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(jsonString);
+      return safeJsonParse(textResponse);
     }
   } catch (error) {
     console.error("Gemini Vision Tarama Hatası:", error);
@@ -130,48 +167,52 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
 // 3. Kullanıcı Tarifini Biçimlendirme
 export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
   try {
-    const prompt = 'Sen profesyonel bir sefsin. Sana verilen duzensiz veya hatali yemek tarifini analiz edip standart bir formata getireceksin.\n\n' +
-      'KULLANICI GIRDI LER I:\n' +
-      '- Baslik: ' + input.title + '\n' +
+    const prompt = 'Sen profesyonel bir şefsin. Sana verilen düzensiz veya hatalı yemek tarifini analiz edip standart bir formata getireceksin.\n\n' +
+      'KULLANICI GİRDİLERİ:\n' +
+      '- Başlık: ' + input.title + '\n' +
       '- Kategori: ' + input.category + '\n' +
-      '- Sure: ' + input.cookingTime + '\n' +
+      '- Süre: ' + input.cookingTime + '\n' +
       '- Girilen Malzeme Metni: "' + input.rawIngredients + '"\n' +
-      '- Girilen Adim Metni: "' + input.rawInstructions + '"\n\n' +
-      'GOREVLERIN:\n' +
-      '1. Malzeme metnindeki tum malzemeleri ve miktarlari ayristirip duzelt.\n' +
-      '2. Adim metnindeki anlatimi profesyonel ve sirali adimlar haline getir.\n' +
-      '3. SADECE gecerli bir JSON objesi ver.\n\n' +
-      'ISTENEN JSON FORMATI:\n' +
+      '- Girilen Adım Metni: "' + input.rawInstructions + '"\n\n' +
+      'GÖREVLERİN:\n' +
+      '1. Malzeme metnindeki tüm malzemeleri ve miktarları ayrıştırıp düzelt.\n' +
+      '2. Adım metnindeki anlatımı profesyonel ve sıralı adımlar haline getir.\n' +
+      '3. SADECE geçerli bir JSON objesi ver.\n\n' +
+      'İSTENEN JSON FORMATI:\n' +
       '{\n' +
-      '  "title": "Duzeltilmis Baslik",\n' +
+      '  "title": "Düzeltilmiş Başlık",\n' +
       '  "mainIngredient": "En belirgin 1 ana malzeme",\n' +
-      '  "ingredients": ["Yumurta", "SUT", "Un"],\n' +
-      '  "ingredientsWithQuantities": ["2 adet Yumurta", "1 su bardagi SUT", "2 su bardagi Un"],\n' +
+      '  "ingredients": ["Yumurta", "Süt", "Un"],\n' +
+      '  "ingredientsWithQuantities": ["2 adet Yumurta", "1 su bardağı Süt", "2 su bardağı Un"],\n' +
       '  "cookingTime": "' + (input.cookingTime || '25 Dk') + '",\n' +
       '  "instructions": [\n' +
-      '    "1. Yumurtalari mikser ile iyice cirpin.",\n' +
-      '    "2. Sutu ekleyip karistirin.",\n' +
+      '    "1. Yumurtaları mikser ile iyice çırpın.",\n' +
+      '    "2. Sütü ekleyip karıştırın.",\n' +
       '    "3. Unu ekleyerek homojen bir hamur elde edin."\n' +
       '  ]\n' +
       '}';
+
 
     const { data, error } = await supabase.functions.invoke('generate-recipe', {
       body: { prompt },
     });
 
+
     if (error) throw error;
 
-    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
+    const textResponse = extractResponseText(data);
+
     if (!textResponse) {
-      console.warn("AI Yanit vermedi");
+      console.warn("⚠️ AI Yanıt vermedi veya metin çıkarılamadı. Ham data:", data);
       return null;
     }
 
-    const cleanText = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const parsedResult = safeJsonParse(textResponse);
+
+    return parsedResult;
 
   } catch (error) {
-    console.error("AI Tarif formatlama hatasi:", error);
+    console.error("❌ YAKALANAN HATA (Catch):", error);
     return null;
   }
 };
