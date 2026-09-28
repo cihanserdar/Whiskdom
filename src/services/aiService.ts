@@ -5,7 +5,7 @@ export interface AIRecipeResult {
   title: string;
   cookingTime: string;
   mainIngredient: string;
-  ingredientsWithQuantities: string[];
+  ingredientsWithQuantities: any[];
   missingIngredients: string[];
   instructions: string[];
 }
@@ -25,6 +25,47 @@ export interface UserRecipeInput {
   rawIngredients: string;
   rawInstructions: string;
 }
+
+// Metin içindeki miktarı, birimi ve saf ürün adını akıllıca ayrıştıran yardımcı fonksiyon
+const parseIngredientString = (rawName: string) => {
+  if (!rawName) return { name: 'Malzeme', amount: 1, unit: 'adet' };
+
+  let text = rawName.trim();
+  let amount = 1;
+  let unit = 'adet';
+
+  // 1. Parantez içindeki gramaj/ml ifadelerini yakalayalım (Örn: "1 paket (500 g) Makarna")
+  const parenMatch = text.match(/\((\d+[\.,]?\d*)\s*(g\vert{}gram\vert{}ml\vert{}kg\vert{}litre\vert{}lt)\)/i);
+  if (parenMatch) {
+    amount = parseFloat(parenMatch[1].replace(',', '.'));
+    unit = parenMatch[2].toLowerCase();
+    if (unit === 'g') unit = 'gram';
+    if (unit === 'lt') unit = 'litre';
+    text = text.replace(/\([\s\S]*?\)/g, '').trim();
+  }
+
+  // 2. Baş taraftaki sayı ve birimleri yakalayalım (Örn: "2.5 litre Su", "200g Peynir")
+  const regex = /^(\d+[\.,]?\d*)\s*(g|gram|ml|kg|litre|lt|adet|paket|su bardağı|yemek kaşığı|çay kaşığı|diş|demet|tutam|bardak)?\s+(.+)/i;
+  const match = text.match(regex);
+
+  if (match) {
+    if (!parenMatch) {
+      amount = parseFloat(match[1].replace(',', '.'));
+    }
+    if (match[2] && !parenMatch) {
+      unit = match[2].toLowerCase();
+      if (unit === 'g') unit = 'gram';
+      if (unit === 'lt') unit = 'litre';
+    }
+    text = match[3].trim();
+  }
+
+  return {
+    name: text.charAt(0).toLocaleUpperCase('tr-TR') + text.slice(1),
+    amount: isNaN(amount) ? 1 : amount,
+    unit: unit || 'adet'
+  };
+};
 
 // Güvenli JSON Ayıklama Yardımcı Fonksiyonu
 const safeJsonParse = (text: string) => {
@@ -47,18 +88,13 @@ const safeJsonParse = (text: string) => {
 // Edge Function'dan gelen yanıtı her ihtimale karşı güvenli ayıklama
 const extractResponseText = (data: any): string | null => {
   if (!data) return null;
-  // 1. Supabase Function doğrudan string döndüyse
   if (typeof data === 'string') return data;
-  // 2. Google Gemini standart candidates yapısı
   if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
     return data.candidates[0].content.parts[0].text;
   }
-  // 3. Düz text alanı varsa
   if (data?.text) return data.text;
-  // 4. Eğer data doğrudan nesneyse ve içinde text varsa
   if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content;
   
-  // Hiçbiri tutmazsa stringe çevirip denetelim
   try {
     return JSON.stringify(data);
   } catch (e) {
@@ -88,6 +124,8 @@ export const generateRecipeWithAI = async (
 Özellikle şu kategoriye ve tarza odaklanarak bir tarif üret: ${category}.
 Bu bilgilere uygun pratik ve lezzetli bir tarif öner.
 
+KRİTİK BİRİM KURALI: Tarif içerisinde "çay kaşığı", "tatlı kaşığı" veya "yemek kaşığı" gibi kaşık ölçüleri geçtiğinde, bunları birim olarak ASLA kullanma. Envanter düşüşlerinin gram/ml bazlı yapılabilmesi için bunları standart mutfak karşılıklarına göre gram ("gram") veya mililitreye ("ml") çevirerek yaz (Örn: 1 yemek kaşığı tereyağı/yağ = 15 gram/ml, 1 tatlı kaşığı tuz/şeker = 5 gram, 1 çay kaşığı baharat = 3 gram).
+
 Cevabını SADECE geçerli bir JSON nesnesi olarak döndür. Başka hiçbir açıklama yazma.
 Format şu şekilde olsun:
 {
@@ -95,8 +133,8 @@ Format şu şekilde olsun:
   "cookingTime": "20 Dk",
   "mainIngredient": "Ana Malzeme Adı",
   "ingredientsWithQuantities": [
-    "200g Taze Kaşar Peyniri",
-    "2 Dilim Somun Ekmek"
+    "200 gram Taze Kaşar Peyniri",
+    "15 gram Tuz"
   ],
   "missingIngredients": ["Ekmek"],
   "instructions": [
@@ -114,7 +152,14 @@ Format şu şekilde olsun:
 
     const textResponse = extractResponseText(data);
     if (textResponse) {
-      return safeJsonParse(textResponse);
+      const parsed = safeJsonParse(textResponse);
+      if (parsed && parsed.ingredientsWithQuantities) {
+        parsed.ingredientsWithQuantities = parsed.ingredientsWithQuantities.map((item: any) => {
+          if (typeof item === 'string') return parseIngredientString(item);
+          return item;
+        });
+      }
+      return parsed;
     }
   } catch (error) {
     console.error("AI Tarif Hatası:", error);
@@ -176,14 +221,15 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
       '- Girilen Adım Metni: "' + input.rawInstructions + '"\n\n' +
       'GÖREVLERİN:\n' +
       '1. Malzeme metnindeki tüm malzemeleri ve miktarları ayrıştırıp düzelt.\n' +
-      '2. Adım metnindeki anlatımı profesyonel ve sıralı adımlar haline getir.\n' +
-      '3. SADECE geçerli bir JSON objesi ver.\n\n' +
+      '2. KRİTİK KURAL: Malzeme metninde "çay kaşığı", "tatlı kaşığı" veya "yemek kaşığı" geçiyorsa, bunları birim olarak ASLA kullanma. Envanter düşüşlerinin gram/ml bazlı yapılabilmesi için bunları mutfak standartlarına göre gram ("gram") veya mililitreye ("ml") çevirerek yaz (Örn: 1 yemek kaşığı tereyağı = 15 gram, 1 tatlı kaşığı tuz = 5 gram).\n' +
+      '3. Adım metnindeki anlatımı profesyonel ve sıralı adımlar haline getir.\n' +
+      '4. SADECE geçerli bir JSON objesi ver.\n\n' +
       'İSTENEN JSON FORMATI:\n' +
       '{\n' +
       '  "title": "Düzeltilmiş Başlık",\n' +
       '  "mainIngredient": "En belirgin 1 ana malzeme",\n' +
       '  "ingredients": ["Yumurta", "Süt", "Un"],\n' +
-      '  "ingredientsWithQuantities": ["2 adet Yumurta", "1 su bardağı Süt", "2 su bardağı Un"],\n' +
+      '  "ingredientsWithQuantities": ["2 adet Yumurta", "200 ml Süt", "15 gram Tuz"],\n' +
       '  "cookingTime": "' + (input.cookingTime || '25 Dk') + '",\n' +
       '  "instructions": [\n' +
       '    "1. Yumurtaları mikser ile iyice çırpın.",\n' +
@@ -192,11 +238,9 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
       '  ]\n' +
       '}';
 
-
     const { data, error } = await supabase.functions.invoke('generate-recipe', {
       body: { prompt },
     });
-
 
     if (error) throw error;
 
@@ -208,6 +252,13 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
     }
 
     const parsedResult = safeJsonParse(textResponse);
+
+    if (parsedResult && parsedResult.ingredientsWithQuantities) {
+      parsedResult.ingredientsWithQuantities = parsedResult.ingredientsWithQuantities.map((item: any) => {
+        if (typeof item === 'string') return parseIngredientString(item);
+        return item;
+      });
+    }
 
     return parsedResult;
 

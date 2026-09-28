@@ -123,7 +123,7 @@ export default function RecipesScreen() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Ana Yemek');
   const [newTime, setNewTime] = useState('25 Dk');
-  const [newPortions, setNewPortions] = useState('4 Kişilik'); // Yeni porsiyon state'i
+  const [newPortions, setNewPortions] = useState('4 Kişilik');
   const [newRawIngredients, setNewRawIngredients] = useState('');
   const [newRawInstructions, setNewRawInstructions] = useState('');
   const [newFormDiets, setNewFormDiets] = useState<string[]>([]);
@@ -203,9 +203,7 @@ export default function RecipesScreen() {
     }
   };
 
-  // 1. AI İle Düzenleyerek Kaydetme Fonksiyonu
   const handleCreateOrUpdateUserRecipeWithAI = async () => {
-    console.log("🟢 AI İLE DÜZENLE BASILDI!");
     if (!newTitle.trim() || !newRawIngredients.trim() || !newRawInstructions.trim()) {
       Alert.alert("Eksik Bilgi", "Lütfen tarif başlığını, malzemeleri ve hazırlanış adımlarını doldurun.");
       return;
@@ -239,9 +237,7 @@ export default function RecipesScreen() {
     });
   };
 
-  // 2. AI Kullanmadan Direkt (Manuel) Kaydetme Fonksiyonu
   const handleCreateOrUpdateUserRecipeDirect = async () => {
-    console.log("🟢 DİREKT (MANUEL) KAYDET BASILDI!");
     if (!newTitle.trim() || !newRawIngredients.trim() || !newRawInstructions.trim()) {
       Alert.alert("Eksik Bilgi", "Lütfen tarif başlığını, malzemeleri ve hazırlanış adımlarını doldurun.");
       return;
@@ -260,7 +256,6 @@ export default function RecipesScreen() {
     });
   };
 
-  // Ortak Kayıt / Güncelleme Yardımcısı
   const saveRecipeToDatabase = async (data: {
     title: string;
     mainIngredient: string;
@@ -279,7 +274,8 @@ export default function RecipesScreen() {
       cookingTime: data.cookingTime,
       instructions: data.instructions,
       isUserCreated: true,
-      isAI: false, // "Sizin Tarifleriniz" sekmesinde çıkması için false olmalı
+      is_user_created: true,
+      isAI: false,
       isSubmitted: isSubmittedToLibrary,
       is_submitted: isSubmittedToLibrary,
       diets: newFormDiets,
@@ -455,6 +451,7 @@ export default function RecipesScreen() {
     const newRecipe: Recipe = {
       id: Date.now().toString(),
       title: aiRecipe.title,
+      category: selectedAiCategory,
       mainIngredient: aiRecipe.mainIngredient,
       ingredients: quantities,
       ingredientsWithQuantities: quantities,
@@ -462,6 +459,7 @@ export default function RecipesScreen() {
       instructions: aiRecipe.instructions,
       isAI: true,
       isUserCreated: false,
+      is_user_created: false,
       isSubmitted: false,
       is_submitted: false
     };
@@ -525,7 +523,8 @@ export default function RecipesScreen() {
       }
 
       if (selectedCategory === 'Sizin Tarifleriniz') {
-        if (!recipe.isUserCreated || recipe.isAI) return false;
+        const isUserRecipe = recipe.isUserCreated || recipe.is_user_created;
+        if (!isUserRecipe || recipe.isAI) return false;
       } else if (selectedCategory === 'Topluluk Tarifleri') {
         if (!recipe.is_approved) return false;
       } else if (selectedCategory === 'Whiskdom Özel') {
@@ -588,6 +587,9 @@ export default function RecipesScreen() {
     ? filteredRecipes 
     : filteredRecipes.slice((currentPage - 1) * recipesPerPage, currentPage * recipesPerPage);
 
+  const isUserRecipeModal = Boolean(selectedRecipe && (selectedRecipe.isUserCreated || selectedRecipe.is_user_created) && !selectedRecipe.isAI);
+  const isAiRecipeModal = Boolean(selectedRecipe?.isAI);
+
   return (
     <ScrollView 
       style={styles.container}
@@ -634,7 +636,7 @@ export default function RecipesScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 2, alignItems: 'center' }}>
           {CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat}
@@ -650,6 +652,7 @@ export default function RecipesScreen() {
               activeOpacity={0.8}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.categoryPillText,
                   selectedCategory === cat && styles.categoryPillTextActive,
@@ -759,7 +762,7 @@ export default function RecipesScreen() {
           {displayedRecipes.map((item) => {
             const dynamicMissing = getDynamicMissingIngredients(item.ingredients);
             const isUrgent = (expiryThreshold !== 0 && activeRangeItems.some(i => i.name.toLowerCase() === item.mainIngredient.toLowerCase())) || 
-                             (expiryThreshold === 0 && criticalUrgentItems.some(i => i.name.toLowerCase() === item.mainIngredient.toLowerCase()));
+                       (expiryThreshold === 0 && criticalUrgentItems.some(i => i.name.toLowerCase() === item.mainIngredient.toLowerCase()));
             const isFav = favorites.includes(item.id);
             const isCooked = history.includes(item.id);
 
@@ -774,12 +777,11 @@ export default function RecipesScreen() {
                 }}
               >
                 <View style={styles.cardHeaderRow}>
-                  <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-                    {item.isUserCreated && !item.isAI && (
-                      <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#A7F3D0' }}>
-                        <Text style={{ color: '#047857', fontWeight: '800', fontSize: 10 }}>💚 Sizin Tarifiniz</Text>
-                      </View>
-                    )}
+                  <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                    <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', maxWidth: '70%' }}>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: '#374151', fontWeight: '800', fontSize: 10 }}>🍲 {item.category || 'Ana Yemek'}</Text>
+                    </View>
+
                     {item.is_approved && (
                       <TouchableOpacity 
                         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#BFDBFE' }}
@@ -790,6 +792,13 @@ export default function RecipesScreen() {
                         <Text style={{ color: '#1D4ED8', fontWeight: '800', fontSize: 10 }}>Topluluk Üyesi Üretti</Text>
                       </TouchableOpacity>
                     )}
+
+                    {Boolean(item.isUserCreated || item.is_user_created) && !item.isAI && (
+                      <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                        <Text style={{ color: '#047857', fontWeight: '800', fontSize: 10 }}>💚 Sizin Tarifiniz</Text>
+                      </View>
+                    )}
+
                     {item.isAI && (
                       <View style={{ backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#D8B4FE' }}>
                         <Text style={{ color: '#7E22CE', fontWeight: '800', fontSize: 10 }}>✨ AI Özel Tarif</Text>
@@ -982,7 +991,7 @@ export default function RecipesScreen() {
 
               <Text style={styles.inputLabel}>Kategori Seçin:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
+                <View style={{ flexDirection: 'row', gap: 6, paddingVertical: 2 }}>
                   {RECIPE_FORM_CATEGORIES.map((cat) => {
                     const isSelected = newCategory === cat;
                     return (
@@ -1105,7 +1114,6 @@ export default function RecipesScreen() {
               </TouchableOpacity>
             </ScrollView>
 
-            {/* İptal Butonu */}
             <TouchableOpacity 
               style={[styles.modalActionBtn, { backgroundColor: '#6C757D', marginTop: 10 }]}
               onPress={() => setAddRecipeModalVisible(false)}
@@ -1114,7 +1122,6 @@ export default function RecipesScreen() {
               <Text style={styles.modalActionBtnText}>İptal</Text>
             </TouchableOpacity>
 
-            {/* İki Farklı Kaydetme Butonu */}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
               <TouchableOpacity 
                 style={[styles.modalActionBtn, { backgroundColor: '#4B5563', flex: 1 }]}
@@ -1343,6 +1350,15 @@ export default function RecipesScreen() {
                 </View>
               </View>
 
+              <View style={{ backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', marginVertical: 10 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>💡 Pratik Kaşık Ölçüleri (Referans):</Text>
+                <Text style={{ fontSize: 10, color: '#6B7280', lineHeight: 15 }}>
+                  • 1 Çay Kaşığı ≈ 3g / 3ml{'\n'}
+                  • 1 Tatlı Kaşığı ≈ 5g / 5ml{'\n'}
+                  • 1 Yemek Kaşığı ≈ 15g / 15ml
+                </Text>
+              </View>
+
               {!selectedRecipe?.isUserCreated && !selectedRecipe?.isAI && (
                 <TouchableOpacity 
                   style={styles.youtubeButton}
@@ -1373,42 +1389,42 @@ export default function RecipesScreen() {
                 <Text style={styles.stepText}>1. Malzemeleri hazırlayıp pişirmeye başlayın.</Text>
               )}
 
-              {selectedRecipe?.isUserCreated && !selectedRecipe?.isAI && (
+              {isUserRecipeModal && (
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 20 }}>
                   <TouchableOpacity 
-                    style={[styles.modalActionBtn, { backgroundColor: '#3B82F6', flex: 1, paddingVertical: 10 }]}
+                    style={[styles.modalActionBtn, { backgroundColor: '#3B82F6', flex: 1, paddingVertical: 12 }]}
                     onPress={() => selectedRecipe && handleOpenEditModal(selectedRecipe)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 11 }]}>✏️ Düzenle</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>✏️ Düzenle</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={[styles.modalActionBtn, { backgroundColor: '#7C3AED', flex: 1, paddingVertical: 10 }]}
+                    style={[styles.modalActionBtn, { backgroundColor: '#7C3AED', flex: 1, paddingVertical: 12 }]}
                     onPress={() => selectedRecipe && handleOpenDuplicateModal(selectedRecipe)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 11 }]}>📋 Kopyala</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>📋 Kopyala</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={[styles.modalActionBtn, { backgroundColor: '#EF4444', flex: 1, paddingVertical: 10 }]}
+                    style={[styles.modalActionBtn, { backgroundColor: '#EF4444', flex: 1, paddingVertical: 12 }]}
                     onPress={() => selectedRecipe && handleDeleteRecipe(selectedRecipe.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 11 }]}>🗑️ Sil</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>🗑️ Sil</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
-              {selectedRecipe?.isAI && (
+              {isAiRecipeModal && (
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 20 }}>
                   <TouchableOpacity 
-                    style={[styles.modalActionBtn, { backgroundColor: '#EF4444', flex: 1, paddingVertical: 10 }]}
+                    style={[styles.modalActionBtn, { backgroundColor: '#EF4444', flex: 1, paddingVertical: 12 }]}
                     onPress={() => selectedRecipe && handleDeleteRecipe(selectedRecipe.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 11 }]}>🗑️ Bu AI Tarifini Sil</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>🗑️ Bu AI Tarifini Sil</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1436,16 +1452,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 },
   subtitle: { fontSize: 12, color: '#6C757D', marginTop: 2, fontWeight: '600', marginBottom: 12 },
 
-  addRecipeBtnHeader: { backgroundColor: '#10B981', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  addRecipeBtnHeaderText: { color: '#FFFFFF', fontWeight: '800', fontSize: 11 },
+  addRecipeBtnHeader: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  addRecipeBtnHeaderText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
 
   searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   searchIcon: { fontSize: 14, marginRight: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1A1A1A', padding: 0 },
 
-  categoryPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: '#E9ECEF', borderWidth: 1, borderColor: '#E9ECEF' },
+  categoryPill: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: '#E9ECEF', borderWidth: 1, borderColor: '#E9ECEF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   categoryPillActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
-  categoryPillText: { fontSize: 11, fontWeight: '700', color: '#495057' },
+  categoryPillText: { fontSize: 12, fontWeight: '700', color: '#495057' },
   categoryPillTextActive: { color: '#FFFFFF' },
 
   modalCategoryPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF' },

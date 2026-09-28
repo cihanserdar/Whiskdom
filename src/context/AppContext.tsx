@@ -386,14 +386,49 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const creatorName = profileData?.name || 'Topluluk Şefi';
       const creatorTitle = profileData?.title || '🌟 Gurme Şef';
 
-      // Gelen malzemeleri garantiye alalım (Düz metin veya structured fark etmez)
+      // Metin içindeki miktarı ve birimi akıllıca ayıran yardımcı parser fonksiyonu
+      const parseIngredient = (rawText: string) => {
+        if (!rawText) return { name: 'Malzeme', amount: 1, unit: 'adet' };
+        let text = rawText.trim();
+        let amount = 1;
+        let unit = 'adet';
+
+        const parenMatch = text.match(/\((\d+[\.,]?\d*)\s*(g\vert{}gram\vert{}ml\vert{}kg\vert{}litre\vert{}lt)\)/i);
+        if (parenMatch) {
+          amount = parseFloat(parenMatch[1].replace(',', '.'));
+          unit = parenMatch[2].toLowerCase();
+          if (unit === 'g') unit = 'gram';
+          if (unit === 'lt') unit = 'litre';
+          text = text.replace(/\([\s\S]*?\)/g, '').trim();
+        }
+
+        const regex = /^(\d+[\.,]?\d*)\s*(g|gram|ml|kg|litre|lt|adet|paket|su bardağı|yemek kaşığı|çay kaşığı|diş|demet|tutam|bardak)?\s+(.+)/i;
+        const match = text.match(regex);
+
+        if (match) {
+          if (!parenMatch) amount = parseFloat(match[1].replace(',', '.'));
+          if (match[2] && !parenMatch) {
+            unit = match[2].toLowerCase();
+            if (unit === 'g') unit = 'gram';
+            if (unit === 'lt') unit = 'litre';
+          }
+          text = match[3].trim();
+        }
+
+        return {
+          name: text.charAt(0).toLocaleUpperCase('tr-TR') + text.slice(1),
+          amount: isNaN(amount) ? 1 : amount,
+          unit: unit || 'adet'
+        };
+      };
+
       const rawIngList = recipe.ingredientsWithQuantities && recipe.ingredientsWithQuantities.length > 0
         ? recipe.ingredientsWithQuantities
         : recipe.ingredients || [];
 
       const structuredIngredients = rawIngList.map((item) => {
         if (typeof item === 'string') {
-          return { name: item, amount: 1, unit: 'adet' };
+          return parseIngredient(item);
         }
         const obj = item as Record<string, unknown>;
         return {
@@ -792,12 +827,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         let currentInventory = [...inventory];
 
         for (const reqIng of recipeToCook.ingredientsStructured) {
-          const reqNameNormalized = reqIng.name.toLocaleLowerCase('tr-TR').trim();
+          const cleanReqName = reqIng.name
+            .toLocaleLowerCase('tr-TR')
+            .replace(/[\d.,]/g, '')
+            .replace(/(adet|paket|su bardağı|yemek kaşığı|çay kaşığı|gram|kg|ml|litre|su bardaği)/g, '')
+            .trim();
+
           let neededAmount = reqIng.amount;
           const reqUnit = reqIng.unit.toLocaleLowerCase('tr-TR').trim();
 
           const matchingItems = currentInventory
-            .filter(item => item.name.toLocaleLowerCase('tr-TR').trim() === reqNameNormalized)
+            .filter(item => {
+              const itemName = item.name.toLocaleLowerCase('tr-TR').trim();
+              return itemName.includes(cleanReqName) || cleanReqName.includes(itemName);
+            })
             .sort((a, b) => {
               const dateA = a.expiryDate ? parseTRDate(a.expiryDate).getTime() : 0;
               const dateB = b.expiryDate ? parseTRDate(b.expiryDate).getTime() : 0;
