@@ -41,7 +41,6 @@ export const signInWithGoogle = async (): Promise<void> => {
       }
     }
   } catch (error: unknown) {
-    console.error('Google Giriş Hatası:', error);
     throw error;
   }
 };
@@ -96,7 +95,7 @@ export const sendPasswordResetEmail = async (email: string) => {
 // Çıkış Yap
 export const signOut = async (): Promise<void> => {
   const { error } = await supabase.auth.signOut();
-  if (error) console.error('Çıkış hatası:', error);
+  if (error) throw error;
 };
 
 // Profil Yoksa Oluştur (Supabase User Tipi ile Tip Güvenli)
@@ -130,7 +129,7 @@ export const ensureUserProfileExists = async (user: User | null): Promise<void> 
         },
       ]);
     }
-  } catch (error) {
-    console.error('Profil kontrol hatası:', error);
+  } catch {
+    // Hata durumunda sessizce geçilir
   }
 };

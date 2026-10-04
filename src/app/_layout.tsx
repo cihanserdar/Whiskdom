@@ -101,17 +101,7 @@ function MainTabsNavigator() {
           }}
         />
 
-        <Tabs.Screen
-          name="arena"
-          options={{
-            title: 'Arena',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size || 20 }}>🏆</Text>
-            ),
-          }}
-        />
-
-        {/* ALT MENÜDE GİZLENEN ROTALAR */}
+        {/* ALT MENÜDE GİZLENEN ROTALAR (Sekme çubuğunda görünmez, rota olarak arka planda çalışır) */}
         <Tabs.Screen
           name="login"
           options={{

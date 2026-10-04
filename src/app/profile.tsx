@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useContext, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Linking,
@@ -59,14 +58,9 @@ export default function ProfileScreen() {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [badgesExpanded, setBadgesExpanded] = useState(false);
   
-  // 👑 PRO CHECKOUT (ÖDEME) EKRANI STATE'LERİ
+  // 👑 PRO CHECKOUT (YAKINDA) EKRANI STATE'İ
   const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
   const [userTier, setUserTier] = useState<'free' | 'pro'>('free');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const [nameInput, setNameInput] = useState(userProfile.name || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -173,13 +167,13 @@ export default function ProfileScreen() {
     },
     {
       id: 'sifir_atik',
-      icon: '♻️',
+      icon: '♻️️',
       name: 'Sıfır Atık Gurusu',
       unlocked: savedCount >= 20,
       unlockedDate: savedCount >= 20 ? '12.09.2026' : undefined,
       description: 'Mutfakta hiçbir gıdayı ziyan etmeyerek tam 20 ürünü israftan kurtaran üst düzey çevreci şef unvanı.',
       requirement: `Gereksinim: 20 ürün kurtarmak. (Şu anki durum: ${savedCount}/20)`,
-      grantsTitle: 'Sıfır Atık Gurusu ♻️'
+      grantsTitle: 'Sıfır Atık Gurusu ♻️️'
     },
     {
       id: 'simyaci',
@@ -255,7 +249,7 @@ export default function ProfileScreen() {
   };
 
   const handleRateApp = () => {
-    Linking.openURL('https://play.google.com/store/apps/details?id=com.whiskdom.app').catch(() => {});
+    Linking.openURL('https://play.google.com/store/apps/details?id=com.whiskdom.mobile').catch(() => {});
   };
 
   const handleSaveProfile = () => {
@@ -280,7 +274,7 @@ export default function ProfileScreen() {
       }
 
       const isGoogleUser = user?.app_metadata?.provider === 'google' || 
-                         user?.app_metadata?.providers?.includes('google');
+                           user?.app_metadata?.providers?.includes('google');
 
       if (isGoogleUser) {
         Alert.alert(
@@ -370,44 +364,6 @@ export default function ProfileScreen() {
     setUserPreferences({ ...userPreferences, allergens: updatedAllergens });
   };
 
-  // 👑 GÜVENLİ ÖDEME (CHECKOUT) İŞLEMİ VE PRO'YA GEÇİŞ
-  const handleCheckoutPayment = async () => {
-    if (!cardHolder || !cardNumber || !expiry || !cvv) {
-      Alert.alert("Eksik Bilgi", "Lütfen tüm kart bilgilerini eksiksiz doldurun.");
-      return;
-    }
-
-    setLoading(true);
-
-    // 2 Saniyelik Güvenli Ödeme Simülasyonu
-    setTimeout(async () => {
-      try {
-        const stored = await AsyncStorage.getItem('@whiskdom_user_quota_v1');
-        if (stored) {
-          const data = JSON.parse(stored);
-          data.tier = 'pro';
-          await AsyncStorage.setItem('@whiskdom_user_quota_v1', JSON.stringify(data));
-        } else {
-          const initialData = {
-            tier: 'pro',
-            aiRecipeUsed: 0,
-            receiptUsed: 0,
-            lastResetDate: new Date().toISOString().split('T')[0],
-          };
-          await AsyncStorage.setItem('@whiskdom_user_quota_v1', JSON.stringify(initialData));
-        }
-
-        setUserTier('pro');
-        setLoading(false);
-        setCheckoutModalVisible(false);
-        Alert.alert("Ödeme Başarılı! 🎉", "Whiskdom Pro aboneliğiniz aktif edilmiştir. İyi mutfaklar!");
-      } catch (error) {
-        setLoading(false);
-        Alert.alert("Hata", "Ödeme işlenirken bir sorun oluştu.");
-      }
-    }, 2000);
-  };
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <Text style={styles.screenTitle}>👤 Whiskdom Profilim</Text>
@@ -425,31 +381,21 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 👑 PRO PAKET DURUM WIDGET'I */}
+      {/* 👑 PRO PAKET DURUM WIDGET'I (YAKINDA MODALI AÇAR) */}
       <TouchableOpacity 
         style={[styles.proWidgetCard, userTier === 'pro' && styles.proWidgetActive]} 
-        onPress={() => {
-          if (userTier !== 'pro') {
-            setCheckoutModalVisible(true);
-          } else {
-            Alert.alert("Whiskdom Pro", "Zaten aktif bir Pro aboneliğiniz bulunmaktadır! 🚀");
-          }
-        }}
+        onPress={() => setCheckoutModalVisible(true)}
         activeOpacity={0.85}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Text style={{ fontSize: 24 }}>👑</Text>
             <View>
-              <Text style={styles.proWidgetTitle}>
-                {userTier === 'pro' ? 'Whiskdom Pro Aktif 🚀' : 'Whiskdom Pro\'ya Geç ✨'}
-              </Text>
-              <Text style={styles.proWidgetSubTitle}>
-                {userTier === 'pro' ? 'Sınırsız AI Şef ve Fiş Tarama Hakları' : 'Günlük haklarını artır, sınırsız lezzet üret!'}
-              </Text>
+              <Text style={styles.proWidgetTitle}>Whiskdom Pro ✨</Text>
+              <Text style={styles.proWidgetSubTitle}>Bol Hak ve Özel Özellikler</Text>
             </View>
           </View>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: userTier === 'pro' ? '#7E22CE' : '#1A1A1A' }}>›</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A1A1A' }}>›</Text>
         </View>
       </TouchableOpacity>
 
@@ -614,107 +560,18 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 👑 TAM EKRAN CHECKOUT (ÖDEME) MODALI */}
-      <Modal visible={checkoutModalVisible} animationType="slide" presentationStyle="fullScreen">
-        <View style={styles.checkoutContainer}>
-          {/* ÜST BAR */}
-          <View style={styles.checkoutHeader}>
-            <TouchableOpacity onPress={() => setCheckoutModalVisible(false)} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+      {/* 👑 PRO / ÖDEME TIKLANDIĞINDA AÇILAN "ÇOK YAKINDA" MODALI */}
+      <Modal visible={checkoutModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>✨ Whiskdom Pro</Text>
+            <Text style={styles.aboutModalText}>
+              Çok yakında hizmetinizde! 🚀
+            </Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => setCheckoutModalVisible(false)} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Kapat</Text>
             </TouchableOpacity>
-            <Text style={styles.checkoutHeaderTitle}>Güvenli Ödeme 🔒</Text>
-            <View style={{ width: 32 }} />
           </View>
-
-          <ScrollView contentContainerStyle={styles.checkoutScrollContent} showsVerticalScrollIndicator={false}>
-            {/* ÜRÜN ÖZET KARTI */}
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryBadge}>👑 PRO ABONELİK</Text>
-              <Text style={styles.summaryTitle}>Whiskdom Pro Sınırsız Paket</Text>
-              <Text style={styles.summaryDesc}>Sınırsız AI Şef, Fiş Tarama ve Öncelikli Özellikler</Text>
-              <View style={styles.divider} />
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Toplam Tutar:</Text>
-                <Text style={styles.priceValue}>₺99.99 / ay</Text>
-              </View>
-            </View>
-
-            {/* KART BİLGİLERİ FORMU */}
-            <View style={styles.formContainer}>
-              <Text style={styles.formSectionTitle}>💳 Kart Bilgileri</Text>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabelText}>Kart Üzerindeki İsim</Text>
-                <TextInput
-                  style={styles.checkoutInput}
-                  placeholder="Ad Soyad"
-                  placeholderTextColor="#A0AEC0"
-                  value={cardHolder}
-                  onChangeText={setCardHolder}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabelText}>Kart Numarası</Text>
-                <TextInput
-                  style={styles.checkoutInput}
-                  placeholder="4532 •••• •••• ••••"
-                  placeholderTextColor="#A0AEC0"
-                  keyboardType="numeric"
-                  maxLength={19}
-                  value={cardNumber}
-                  onChangeText={setCardNumber}
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabelText}>Son Kul. Tarihi</Text>
-                  <TextInput
-                    style={styles.checkoutInput}
-                    placeholder="AA/YY"
-                    placeholderTextColor="#A0AEC0"
-                    maxLength={5}
-                    value={expiry}
-                    onChangeText={setExpiry}
-                  />
-                </View>
-
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabelText}>CVV / CVC</Text>
-                  <TextInput
-                    style={styles.checkoutInput}
-                    placeholder="123"
-                    placeholderTextColor="#A0AEC0"
-                    keyboardType="numeric"
-                    secureTextEntry
-                    maxLength={4}
-                    value={cvv}
-                    onChangeText={setCvv}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* GÜVENLİK BİLGİSİ */}
-            <View style={styles.securityInfo}>
-              <Text style={styles.securityText}>🛡️ 256-bit SSL Güvenli Şifreleme ile korunmaktadır.</Text>
-            </View>
-
-            {/* ÖDEMEYİ TAMAMLA BUTONU */}
-            <TouchableOpacity
-              style={[styles.payButton, loading && { opacity: 0.7 }]}
-              onPress={handleCheckoutPayment}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.payButtonText}>Ödemeyi Tamamla ve Pro Ol 🚀</Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
         </View>
       </Modal>
 
@@ -757,7 +614,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* ŞİFRE DEĞİŞTİRME MODALI (E-POSTA/ŞİFRE KULLANICILARI İÇİN) */}
+      {/* ŞİFRE DEĞİŞTİRME MODALI */}
       <Modal visible={passwordModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -914,32 +771,6 @@ const styles = StyleSheet.create({
   proWidgetActive: { backgroundColor: '#EDE9FE', borderColor: '#C084FC' },
   proWidgetTitle: { fontSize: 14, fontWeight: '900', color: '#7E22CE' },
   proWidgetSubTitle: { fontSize: 11, color: '#6B21A8', fontWeight: '600', marginTop: 2 },
-
-  // CHECKOUT (ÖDEME) EKRANI STYLES
-  checkoutContainer: { flex: 1, backgroundColor: '#F8F9FA' },
-  checkoutHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 54, paddingBottom: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E9ECEF' },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F3F5', justifyContent: 'center', alignItems: 'center' },
-  closeText: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
-  checkoutHeaderTitle: { fontSize: 16, fontWeight: '900', color: '#1A1A1A' },
-  checkoutScrollContent: { padding: 20 },
-  summaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 20, elevation: 1 },
-  summaryBadge: { backgroundColor: '#F3E8FF', color: '#7E22CE', fontWeight: '900', fontSize: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 8, overflow: 'hidden' },
-  summaryTitle: { fontSize: 16, fontWeight: '900', color: '#1A1A1A', marginBottom: 4 },
-  summaryDesc: { fontSize: 12, color: '#6C757D', lineHeight: 16 },
-  divider: { height: 1, backgroundColor: '#E9ECEF', marginVertical: 14 },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  priceLabel: { fontSize: 13, fontWeight: '700', color: '#4A5568' },
-  priceValue: { fontSize: 18, fontWeight: '900', color: '#7E22CE' },
-  formContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 16, elevation: 1 },
-  formSectionTitle: { fontSize: 14, fontWeight: '900', color: '#1A1A1A', marginBottom: 14 },
-  inputGroup: { marginBottom: 12 },
-  inputLabelText: { fontSize: 11, fontWeight: '700', color: '#4A5568', marginBottom: 4 },
-  checkoutInput: { backgroundColor: '#F8F9FA', borderRadius: 10, paddingHorizontal: 12, height: 42, fontSize: 13, color: '#1A1A1A', borderWidth: 1, borderColor: '#E9ECEF', fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 10 },
-  securityInfo: { alignItems: 'center', marginBottom: 20 },
-  securityText: { fontSize: 11, color: '#6C757D', fontWeight: '600' },
-  payButton: { backgroundColor: '#7E22CE', height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  payButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
 
   wasteSummaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
   wasteHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },

@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 // 📦 Paket Limitleri Tanımı (AI Şef: 5, Fiş: 1)
 export const TIER_LIMITS = {
   free: { aiRecipeLimit: 5, receiptLimit: 1 },
-  pro: { aiRecipeLimit: 20, receiptLimit: 15 },       
+  pro: { aiRecipeLimit: 20, receiptLimit: 15 },      
   premium: { aiRecipeLimit: 999, receiptLimit: 999 }  
 };
 
@@ -58,8 +58,7 @@ export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowe
     }
 
     return { allowed, remaining, resetTimeText };
-  } catch (error) {
-    console.error("Kota okunurken hata:", error);
+  } catch {
     return { allowed: false, remaining: 0, resetTimeText: '' };
   }
 }
@@ -70,14 +69,10 @@ export async function consumeQuota(type: 'aiRecipe' | 'receipt'): Promise<void> 
     const featureKey = type === 'aiRecipe' ? 'aiRecipe' : 'receipt';
 
     // İşlemi doğrudan PostgreSQL tarafındaki güvenli fonksiyona devrediyoruz
-    const { error } = await supabase.rpc('consume_quota_safely', {
+    await supabase.rpc('consume_quota_safely', {
       feature_type: featureKey
     });
-
-    if (error) {
-      console.error("Sunucu tarafı kota düşürme hatası:", error);
-    }
-  } catch (error) {
-    console.error("Kota düşürülürken hata:", error);
+  } catch {
+    // Hata durumunda sessizce geçilir
   }
 }

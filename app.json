@@ -8,7 +8,8 @@
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.whiskdom.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +22,7 @@
       "permissions": [
         "android.permission.CAMERA"
       ],
-      "package": "com.anonymous.Whiskdom"
+      "package": "com.whiskdom.mobile"
     },
     "web": {
       "output": "static",
@@ -39,22 +40,7 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-web-browser",
-      "expo-image",
-      [
-        "react-native-android-widget",
-        {
-          "widgets": [
-            {
-              "name": "MealWidget",
-              "label": "Whiskdom Yemek Planı",
-              "minWidth": "250dp",
-              "minHeight": "110dp",
-              "updatePeriodMillis": 1800000,
-              "widgetBackground": "#FFFFFF"
-            }
-          ]
-        }
-      ]
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

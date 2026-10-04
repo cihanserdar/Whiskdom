@@ -28,8 +28,8 @@ export const fetchProductByBarcode = async (barcode: string): Promise<BarcodePro
         imageUrl: imageUrl,
       };
     }
-  } catch (error) {
-    console.error("Open Food Facts API Hatası:", error);
+  } catch {
+    // Hata durumunda sessizce geçilir
   }
 
   return { found: false };

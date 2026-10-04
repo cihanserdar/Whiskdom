@@ -47,7 +47,6 @@ const RECIPE_FORM_CATEGORIES = [
 ];
 
 const AI_TARGET_CATEGORIES = [
-  '✨ AI Sürprizi (Serbest Mod)',
   '⚡ Hızlı & Pratik (15 dk)',
   'Ana Yemek',
   'Çorba',
@@ -99,7 +98,8 @@ export default function RecipesScreen() {
   const [aiRecipe, setAiRecipe] = useState<AIRecipeResult | null>(null);
 
   const [aiCategoryModalVisible, setAiCategoryModalVisible] = useState(false);
-  const [selectedAiCategory, setSelectedAiCategory] = useState<string>('Fit & Sağlıklı');
+  const [selectedAiCategory, setSelectedAiCategory] = useState<string>('Ana Yemek');
+  const [aiIngredientMode, setAiIngredientMode] = useState<'complete' | 'missing' | 'free'>('free');
   const [remainingQuota, setRemainingQuota] = useState<number | null>(null);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -143,7 +143,7 @@ export default function RecipesScreen() {
     try {
       const quotaStatus = await checkQuota('aiRecipe');
       setRemainingQuota(quotaStatus.remaining);
-    } catch (e: unknown) {
+    } catch {
       // Sessizce geçilir
     }
     setAiCategoryModalVisible(true);
@@ -163,7 +163,7 @@ export default function RecipesScreen() {
     Alert.alert("Başarılı!", "Eksik malzemeler alışveriş listenize eklendi.");
   };
 
-  const handleGenerateAIRecipe = async (targetCategory: string) => {
+  const handleGenerateAIRecipe = async (targetCategory: string, ingredientMode: 'complete' | 'missing' | 'free') => {
     try {
       const quotaStatus = await checkQuota('aiRecipe');
 
@@ -174,7 +174,7 @@ export default function RecipesScreen() {
         );
         return;
       }
-    } catch (e: unknown) {
+    } catch {
       // Sessizce geçilir
     }
 
@@ -187,7 +187,7 @@ export default function RecipesScreen() {
     setAiLoading(true);
     
     try {
-      const result = await generateRecipeWithAI(allIngredientNames, userPreferences, targetCategory);
+      const result = await generateRecipeWithAI(allIngredientNames, userPreferences, targetCategory, ingredientMode);
       setAiLoading(false);
 
       if (result) {
@@ -198,7 +198,7 @@ export default function RecipesScreen() {
       } else {
         Alert.alert("Hata", "AI tarif oluştururken bir sorun oluştu. Lütfen tekrar deneyin.");
       }
-    } catch (error: unknown) {
+    } catch {
       setAiLoading(false);
     }
   };
@@ -224,7 +224,7 @@ export default function RecipesScreen() {
     const finalCookingTime = aiFormatted?.cookingTime || newTime;
     const finalMainIngredient = aiFormatted?.mainIngredient || 'Genel';
     const finalIngredientsWithQuantities = aiFormatted?.ingredientsWithQuantities || newRawIngredients.split('\n').map(i => i.trim()).filter(Boolean);
-    const finalIngredients = aiFormatted?.ingredients || finalIngredientsWithQuantities;
+    const finalIngredients = aiFormatted?.ingredients || finalIngredientsWithQuantities.map((item: any) => typeof item === 'string' ? item : item.name);
     const finalInstructions = aiFormatted?.instructions || newRawInstructions.split('\n').map(i => i.trim()).filter(Boolean);
 
     await saveRecipeToDatabase({
@@ -260,7 +260,7 @@ export default function RecipesScreen() {
     title: string;
     mainIngredient: string;
     ingredients: string[];
-    ingredientsWithQuantities: string[];
+    ingredientsWithQuantities: any[];
     cookingTime: string;
     instructions: string[];
   }) => {
@@ -340,7 +340,12 @@ export default function RecipesScreen() {
     setNewTitle(recipe.title);
     setNewCategory(recipe.category || 'Ana Yemek');
     setNewTime(recipe.cookingTime || '25 Dk');
-    setNewRawIngredients(recipe.ingredientsWithQuantities?.join('\n') || recipe.ingredients.join('\n'));
+    
+    const rawIngsText = recipe.ingredientsWithQuantities 
+      ? recipe.ingredientsWithQuantities.map((i: any) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
+      : (recipe.ingredients || []).join('\n');
+
+    setNewRawIngredients(rawIngsText);
     setNewRawInstructions(recipe.instructions?.join('\n') || '');
     setNewFormDiets(recipe.diets || []);
     setNewFormAllergens(recipe.allergens || []);
@@ -354,7 +359,12 @@ export default function RecipesScreen() {
     setNewTitle(`${recipe.title} (Kopya)`);
     setNewCategory(recipe.category || 'Ana Yemek');
     setNewTime(recipe.cookingTime || '25 Dk');
-    setNewRawIngredients(recipe.ingredientsWithQuantities?.join('\n') || recipe.ingredients.join('\n'));
+
+    const rawIngsText = recipe.ingredientsWithQuantities 
+      ? recipe.ingredientsWithQuantities.map((i: any) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
+      : (recipe.ingredients || []).join('\n');
+
+    setNewRawIngredients(rawIngsText);
     setNewRawInstructions(recipe.instructions?.join('\n') || '');
     setNewFormDiets(recipe.diets || []);
     setNewFormAllergens(recipe.allergens || []);
@@ -387,7 +397,7 @@ export default function RecipesScreen() {
           profileBadge = data.active_title || data.title || profileBadge;
           profileXp = data.xp !== null && data.xp !== undefined ? Number(data.xp) : 0;
         }
-      } catch (err: unknown) {
+      } catch {
         // Sessizce geçilir
       }
     } else if (recipe.creatorProfile) {
@@ -435,7 +445,7 @@ export default function RecipesScreen() {
   const handleToggleFormAllergen = (allergen: string) => {
     const exists = newFormAllergens.includes(allergen);
     if (exists) {
-      setNewFormAllergens(newFormAllergens.filter(a => a !== allergen));
+      setNewFormAllergens(newFormAllergens.filter(d => d !== allergen));
     } else {
       setNewFormAllergens([...newFormAllergens, allergen]);
     }
@@ -444,17 +454,30 @@ export default function RecipesScreen() {
   const handleSaveAIRecipe = async () => {
     if (!aiRecipe) return;
 
-    const quantities = aiRecipe.ingredientsWithQuantities && aiRecipe.ingredientsWithQuantities.length > 0 
+    const rawList: any[] = (aiRecipe.ingredientsWithQuantities && aiRecipe.ingredientsWithQuantities.length > 0) 
       ? aiRecipe.ingredientsWithQuantities 
       : [aiRecipe.mainIngredient, ...aiRecipe.missingIngredients];
+
+    const quantities = rawList.map((item: any) => {
+      if (typeof item === 'string') {
+        return { name: item, amount: 1, unit: 'adet' };
+      }
+      return {
+        name: item?.name || 'Malzeme',
+        amount: item?.amount || 1,
+        unit: item?.unit || 'adet'
+      };
+    });
+
+    const simpleIngredients = quantities.map((item: any) => item.name);
 
     const newRecipe: Recipe = {
       id: Date.now().toString(),
       title: aiRecipe.title,
       category: selectedAiCategory,
       mainIngredient: aiRecipe.mainIngredient,
-      ingredients: quantities,
-      ingredientsWithQuantities: quantities,
+      ingredients: simpleIngredients,
+      ingredientsWithQuantities: quantities as any,
       cookingTime: aiRecipe.cookingTime,
       instructions: aiRecipe.instructions,
       isAI: true,
@@ -482,7 +505,7 @@ export default function RecipesScreen() {
           .update({ total_cooked: newHistoryCount })
           .eq('id', authUser.id);
       }
-    } catch (err: unknown) {
+    } catch {
       // Sessizce geçilir
     }
 
@@ -717,12 +740,12 @@ export default function RecipesScreen() {
       {aiRecipe && (
         <View style={styles.aiCardContainer}>
           <View style={styles.aiCardHeader}>
-            <Text style={styles.aiBadgeText}>✨ AI ÖNERİSİ (Özel)</Text>
+            <Text style={styles.aiBadgeText}>✨ AI ÖNERİSİ</Text>
             {aiRecipe.cookingTime ? <Text style={styles.timeBadge}>⏱️ {aiRecipe.cookingTime}</Text> : null}
           </View>
 
           <Text style={styles.aiNoteText}>
-            Dolabındaki malzemeler ve kişisel tercihlerine özel hazırlanan tarif (Yalnızca siz görürsünüz):
+            Şefimiz dolabınızdaki malzemeler ve kişisel diyet/alerjen tercihlerinize özel tarifi hazırladı:
           </Text>
 
           <Text style={styles.recipeTitle}>{aiRecipe.title}</Text>
@@ -745,7 +768,7 @@ export default function RecipesScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4A5568' }]} onPress={handleOpenAiModal} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>🔄 Yeni Öner</Text>
+              <Text style={styles.buttonText}>🔄 Yeni Tarif Öner</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -913,8 +936,8 @@ export default function RecipesScreen() {
         onRequestClose={() => setAiCategoryModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>👨‍🍳 AI Şef İçin Tarz / Kategori Seç</Text>
+          <View style={[styles.modalContainer, { maxHeight: '85%' }]}>
+            <Text style={styles.modalTitle}>👨‍🍳 AI Şef Özel Tarif Oluşturucu</Text>
             
             <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, alignSelf: 'center', marginVertical: 6 }}>
               <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '700' }}>
@@ -922,11 +945,38 @@ export default function RecipesScreen() {
               </Text>
             </View>
 
-            <Text style={{ fontSize: 11, color: '#6C757D', textAlign: 'center', marginBottom: 10 }}>
-              Hangi tarzda bir tarif üretmek istiyorsun? (Üretilen tarifler yalnızca size özeldir)
-            </Text>
-
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%', marginVertical: 4 }}>
+              
+              <Text style={styles.filterSectionTitle}>🛒 Malzeme Modu:</Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
+                {[
+                  { label: '✨ Serbest', value: 'free' },
+                  { label: '✅ Tam Malzeme', value: 'complete' },
+                  { label: '🛒 Eksik Malzeme', value: 'missing' },
+                ].map((mode) => (
+                  <TouchableOpacity
+                    key={mode.value}
+                    style={[
+                      styles.modalOptionBtn,
+                      { flex: 1, paddingVertical: 10 },
+                      aiIngredientMode === mode.value && styles.activeModalOptionBtn,
+                      mode.value === 'free' && { borderColor: '#7E22CE', backgroundColor: aiIngredientMode === mode.value ? '#7E22CE' : '#F3E8FF' }
+                    ]}
+                    onPress={() => setAiIngredientMode(mode.value as 'complete' | 'missing' | 'free')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.modalOptionText,
+                      aiIngredientMode === mode.value && styles.activeModalOptionText,
+                      mode.value === 'free' && aiIngredientMode !== mode.value && { color: '#7E22CE', fontWeight: '800' }
+                    ]}>
+                      {mode.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterSectionTitle}>🍲 Yemek Kategorisi / Tarzı:</Text>
               {AI_TARGET_CATEGORIES.map((category) => (
                 <TouchableOpacity
                   key={category}
@@ -934,7 +984,6 @@ export default function RecipesScreen() {
                     styles.modalOptionBtn,
                     { marginVertical: 3 },
                     selectedAiCategory === category && styles.activeModalOptionBtn,
-                    category.includes('AI Sürprizi') && { borderColor: '#7E22CE', backgroundColor: selectedAiCategory === category ? '#7E22CE' : '#F3E8FF' }
                   ]}
                   onPress={() => setSelectedAiCategory(category)}
                   activeOpacity={0.8}
@@ -942,7 +991,6 @@ export default function RecipesScreen() {
                   <Text style={[
                     styles.modalOptionText,
                     selectedAiCategory === category && styles.activeModalOptionText,
-                    category.includes('AI Sürprizi') && selectedAiCategory !== category && { color: '#7E22CE', fontWeight: '800' }
                   ]}>
                     {category}
                   </Text>
@@ -963,7 +1011,7 @@ export default function RecipesScreen() {
                 disabled={aiLoading}
                 onPress={() => {
                   setAiCategoryModalVisible(false);
-                  handleGenerateAIRecipe(selectedAiCategory);
+                  handleGenerateAIRecipe(selectedAiCategory, aiIngredientMode);
                 }}
               >
                 {aiLoading ? (
@@ -1231,13 +1279,13 @@ export default function RecipesScreen() {
       <Modal visible={filterModalVisible} animationType="fade" transparent={true} onRequestClose={() => setFilterModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>⚙️ Tarif Görünüm Filtreleri</Text>
+            <Text style={styles.modalTitle}>⚙ Tarif Görünüm Filtreleri</Text>
 
             <Text style={styles.filterSectionTitle}>⭐ Özel Koleksiyonlar:</Text>
             <View style={styles.filterOptionsGroup}>
               {[
                 { label: 'Tüm Tarif Koleksiyonu', value: 'all' },
-                { label: '❤️ Favori Tariflerim', value: 'favorites' },
+                { label: '❤️️ Favori Tariflerim', value: 'favorites' },
                 { label: '📜 Son Yapılan Tarifler', value: 'history' }
               ].map((opt) => (
                 <TouchableOpacity 
@@ -1312,7 +1360,7 @@ export default function RecipesScreen() {
               <Text style={styles.detailTitle}>{selectedRecipe?.title}</Text>
               
               {selectedRecipe?.cookingTime && (
-                <Text style={styles.detailTime}>⏱️ Hazırlama / Pişirme Süresi: {selectedRecipe.cookingTime}</Text>
+                <Text style={styles.detailTime}>⏱ Hazırlama / Pişirme Süresi: {selectedRecipe.cookingTime}</Text>
               )}
 
               {selectedRecipe?.is_approved && (
@@ -1365,17 +1413,20 @@ export default function RecipesScreen() {
                   onPress={() => selectedRecipe && handleOpenYouTubeVideo(selectedRecipe.title)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.youtubeButtonText}>▶️ YouTube'da Yapılışını İzle</Text>
+                  <Text style={styles.youtubeButtonText}>▶ YouTube'da Yapılışını İzle</Text>
                 </TouchableOpacity>
               )}
 
               <Text style={styles.detailSubTitle}>📏 Gerekli Malzemeler ({portionCount} Kişilik):</Text>
               {selectedRecipe?.ingredientsWithQuantities ? (
-                selectedRecipe.ingredientsWithQuantities.map((item, idx) => (
-                  <Text key={idx} style={styles.detailText}>
-                    • {calculateIngredientPortion(item, portionCount)}
-                  </Text>
-                ))
+                selectedRecipe.ingredientsWithQuantities.map((item: any, idx: number) => {
+                  const ingredientStr = typeof item === 'string' ? item : `${item.amount || 1} ${item.unit || 'adet'} ${item.name || ''}`;
+                  return (
+                    <Text key={idx} style={styles.detailText}>
+                      • {calculateIngredientPortion(ingredientStr, portionCount)}
+                    </Text>
+                  );
+                })
               ) : (
                 <Text style={styles.detailText}>• {selectedRecipe?.mainIngredient}</Text>
               )}
@@ -1396,7 +1447,7 @@ export default function RecipesScreen() {
                     onPress={() => selectedRecipe && handleOpenEditModal(selectedRecipe)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>✏️ Düzenle</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>✏️️ Düzenle</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -1424,7 +1475,7 @@ export default function RecipesScreen() {
                     onPress={() => selectedRecipe && handleDeleteRecipe(selectedRecipe.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>🗑️ Bu AI Tarifini Sil</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>🗑 Bu AI Tarifini Sil</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1485,10 +1536,10 @@ const styles = StyleSheet.create({
   sktWarningTitle: { fontSize: 12, fontWeight: '800', color: '#B45309', marginBottom: 2 },
   sktWarningItems: { fontSize: 12, fontWeight: '600', color: '#92400E' },
 
-  aiCardContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
+  aiCardContainer: { backgroundColor: '#F3E8FF', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1.5, borderColor: '#9333EA', elevation: 1 },
   aiCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   aiBadgeText: { color: '#7E22CE', fontWeight: '800', fontSize: 12 },
-  timeBadge: { backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 11, color: '#6B21A8', fontWeight: '700' },
+  timeBadge: { backgroundColor: '#E9D5FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 11, color: '#6B21A8', fontWeight: '700' },
   aiNoteText: { fontSize: 12, color: '#6C757D', marginBottom: 10, fontWeight: '500' },
   aiCardActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },

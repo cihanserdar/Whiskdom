@@ -5,7 +5,11 @@ export interface AIRecipeResult {
   title: string;
   cookingTime: string;
   mainIngredient: string;
-  ingredientsWithQuantities: any[];
+  ingredientsWithQuantities: {
+    name: string;
+    amount: number;
+    unit: string;
+  }[];
   missingIngredients: string[];
   instructions: string[];
 }
@@ -79,25 +83,59 @@ const safeJsonParse = (text: string) => {
       return JSON.parse(jsonString);
     }
     return JSON.parse(cleanedText);
-  } catch (err) {
-    console.error("JSON Parse Hatası. Ham metin:", text);
+  } catch {
     return null;
   }
 };
 
-// Edge Function'dan gelen yanıtı her ihtimale karşı güvenli ayıklama
-const extractResponseText = (data: any): string | null => {
+// Edge Function'dan gelen yanıtı her ihtimale karşı güvenli ayıklama (any kaldırıldı, unknown kullanıldı)
+const extractResponseText = (data: unknown): string | null => {
   if (!data) return null;
   if (typeof data === 'string') return data;
-  if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    return data.candidates[0].content.parts[0].text;
+  
+  if (typeof data === 'object' && data !== null) {
+    const record = data as Record<string, unknown>;
+    
+    // Supabase invoke yanıt yapısı kontrolü
+    if (
+      Array.isArray(record.candidates) &&
+      record.candidates[0] &&
+      typeof record.candidates[0] === 'object' &&
+      record.candidates[0] !== null
+    ) {
+      const candidate = record.candidates[0] as Record<string, unknown>;
+      if (
+        candidate.content &&
+        typeof candidate.content === 'object' &&
+        candidate.content !== null
+      ) {
+        const content = candidate.content as Record<string, unknown>;
+        if (Array.isArray(content.parts) && content.parts[0] && typeof content.parts[0] === 'object' && content.parts[0] !== null) {
+          const part = content.parts[0] as Record<string, unknown>;
+          if (typeof part.text === 'string') return part.text;
+        }
+      }
+    }
+
+    if (typeof record.text === 'string') return record.text;
+
+    if (
+      Array.isArray(record.choices) &&
+      record.choices[0] &&
+      typeof record.choices[0] === 'object' &&
+      record.choices[0] !== null
+    ) {
+      const choice = record.choices[0] as Record<string, unknown>;
+      if (choice.message && typeof choice.message === 'object' && choice.message !== null) {
+        const message = choice.message as Record<string, unknown>;
+        if (typeof message.content === 'string') return message.content;
+      }
+    }
   }
-  if (data?.text) return data.text;
-  if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content;
   
   try {
     return JSON.stringify(data);
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -106,7 +144,8 @@ const extractResponseText = (data: any): string | null => {
 export const generateRecipeWithAI = async (
   ingredients: string[], 
   preferences?: UserPreferences,
-  category: string = 'Fit & Sağlıklı'
+  category: string = 'Fit & Sağlıklı',
+  ingredientMode: 'complete' | 'missing' | 'free' = 'free'
 ): Promise<AIRecipeResult | null> => {
   if (!ingredients || ingredients.length === 0) return null;
 
@@ -120,8 +159,18 @@ export const generateRecipeWithAI = async (
     }
   }
 
+  let modeInstruction = "";
+  if (ingredientMode === 'complete') {
+    modeInstruction = "ÖNEMLİ KURAL: Yalnızca yukarıda verilen mevcut malzemeleri kullanarak (ekstra market malzemesi eklemeden) bir tarif üret.";
+  } else if (ingredientMode === 'missing') {
+    modeInstruction = "ÖNEMLİ KURAL: Mevcut malzemeleri temel al, ancak lezzet veya bütünlük için eksik kalan birkaç temel malzemeyi 'missingIngredients' listesine ekleyebilirsin.";
+  } else {
+    modeInstruction = "ÖNEMLİ KURAL: Serbest moddasın, dolaptakileri değerlendirirken dışarıdan ek malzemeler de ekleyebilirsin.";
+  }
+
   const prompt = `Sen uzman bir şefsin. Elimizdeki mutfak malzemeleri şunlar: ${ingredients.join(', ')}. ${preferenceRules}
 Özellikle şu kategoriye ve tarza odaklanarak bir tarif üret: ${category}.
+${modeInstruction}
 Bu bilgilere uygun pratik ve lezzetli bir tarif öner.
 
 KRİTİK BİRİM KURALI: Tarif içerisinde "çay kaşığı", "tatlı kaşığı" veya "yemek kaşığı" gibi kaşık ölçüleri geçtiğinde, bunları birim olarak ASLA kullanma. Envanter düşüşlerinin gram/ml bazlı yapılabilmesi için bunları standart mutfak karşılıklarına göre gram ("gram") veya mililitreye ("ml") çevirerek yaz (Örn: 1 yemek kaşığı tereyağı/yağ = 15 gram/ml, 1 tatlı kaşığı tuz/şeker = 5 gram, 1 çay kaşığı baharat = 3 gram).
@@ -153,16 +202,19 @@ Format şu şekilde olsun:
     const textResponse = extractResponseText(data);
     if (textResponse) {
       const parsed = safeJsonParse(textResponse);
-      if (parsed && parsed.ingredientsWithQuantities) {
-        parsed.ingredientsWithQuantities = parsed.ingredientsWithQuantities.map((item: any) => {
+      if (parsed && Array.isArray(parsed.ingredientsWithQuantities)) {
+        parsed.ingredientsWithQuantities = parsed.ingredientsWithQuantities.map((item: unknown) => {
           if (typeof item === 'string') return parseIngredientString(item);
-          return item;
+          if (typeof item === 'object' && item !== null) {
+            return item;
+          }
+          return { name: String(item), amount: 1, unit: 'adet' };
         });
       }
       return parsed;
     }
-  } catch (error) {
-    console.error("AI Tarif Hatası:", error);
+  } catch {
+    // Hata durumunda sessizce çıkılır
   }
   return null;
 };
@@ -203,8 +255,8 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
     if (textResponse) {
       return safeJsonParse(textResponse);
     }
-  } catch (error) {
-    console.error("Gemini Vision Tarama Hatası:", error);
+  } catch {
+    // Hata durumunda sessizce çıkılır
   }
   return null;
 };
@@ -247,23 +299,24 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
     const textResponse = extractResponseText(data);
 
     if (!textResponse) {
-      console.warn("⚠️ AI Yanıt vermedi veya metin çıkarılamadı. Ham data:", data);
       return null;
     }
 
     const parsedResult = safeJsonParse(textResponse);
 
-    if (parsedResult && parsedResult.ingredientsWithQuantities) {
-      parsedResult.ingredientsWithQuantities = parsedResult.ingredientsWithQuantities.map((item: any) => {
+    if (parsedResult && Array.isArray(parsedResult.ingredientsWithQuantities)) {
+      parsedResult.ingredientsWithQuantities = parsedResult.ingredientsWithQuantities.map((item: unknown) => {
         if (typeof item === 'string') return parseIngredientString(item);
-        return item;
+        if (typeof item === 'object' && item !== null) {
+          return item;
+        }
+        return { name: String(item), amount: 1, unit: 'adet' };
       });
     }
 
     return parsedResult;
 
-  } catch (error) {
-    console.error("❌ YAKALANAN HATA (Catch):", error);
+  } catch {
     return null;
   }
 };
