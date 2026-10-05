@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { AppContext, InventoryItem } from '../context/AppContext';
 import SplashScreen from '../screens/SplashScreen';
-import { checkQuota, consumeQuota } from '../services/quotaService';
+import { checkQuota } from '../services/quotaService';
 import { supabase } from '../services/supabase'; // 🔒 Güvenli Supabase istemcisi
 
 const BRAND_SUGGESTIONS = ['Torku', 'Sütaş', 'İçim', 'Pınar', 'Öncü', 'Filiz', 'Tadım', 'Banvit', 'Reis', 'Söke', 'Komili'];
@@ -166,10 +166,12 @@ export default function HomeScreen() {
       try {
         const prompt = 'Bu alışveriş fişi veya gıda listesi fotoğrafındaki ürünleri tespit et. Sadece şu JSON formatında cevap ver: [{"name": "Ürün Adı", "brand": "Marka", "quantity": "Miktar (örn: 1 Litre, 2 Adet)"}]. Başka hiçbir açıklama yazma.';
 
+        // Edge Function'a hangi özellik olduğunu (feature: 'receipt') bildiriyoruz
         const { data, error } = await supabase.functions.invoke('generate-recipe', {
           body: { 
             prompt: prompt,
-            base64Image: base64Image 
+            base64Image: base64Image,
+            feature: 'receipt' 
           },
         });
 
@@ -202,7 +204,8 @@ export default function HomeScreen() {
             setReceiptItems(formattedItems);
             setIsAnalyzing(false);
             
-            await consumeQuota('receipt');
+            // NOT: consumeQuota('receipt') buradan kaldırıldı! Kota Edge Function içinde düşürüldü.
+            // Sadece arayüzdeki sayacı güncellemek için çağrılıyor:
             updateReceiptQuota();
             return;
           }

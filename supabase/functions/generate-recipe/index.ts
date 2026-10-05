@@ -19,6 +19,7 @@ interface GeminiContent {
 interface RequestPayload {
   prompt?: string;
   base64Image?: string;
+  feature?: string; // 'aiRecipe' veya 'receipt'
 }
 
 Deno.serve(async (req) => {
@@ -27,7 +28,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Authorization header kontrolü (JWT)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Yetkilendirme tokenı bulunamadı.' }), {
@@ -36,14 +36,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Supabase istemcisini kullanıcının token'ı ile oluştur
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Oturum açan kullanıcıyı doğrula
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Geçersiz veya süresi dolmuş oturum.' }), {
@@ -52,25 +50,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3. Sunucu tarafında güvenli kota kontrolü ve düşürme (RPC)
-    const { data: quotaResult, error: quotaError } = await supabaseClient.rpc('consume_quota_safely', {
+    // İstek gövdesini alarak hangi özelliğin çağrıldığını öğreniyoruz
+    const requestBody: RequestPayload = await req.json().catch(() => ({}));
+    const { prompt, base64Image, feature } = requestBody;
+    const targetFeature = feature === 'receipt' ? 'receipt' : 'aiRecipe';
+
+    // Güvenli kota kontrolü ve düşürme (Her iki olası RPC parametre imzasını da destekler)
+    let quotaResult: any = null;
+    let quotaError: any = null;
+
+    const res1 = await supabaseClient.rpc('consume_quota_safely', {
       p_user_id: user.id,
-      p_feature: 'aiRecipe'
+      p_feature: targetFeature
     });
+
+    if (!res1.error) {
+      quotaResult = res1.data;
+    } else {
+      const res2 = await supabaseClient.rpc('consume_quota_safely', {
+        feature_type: targetFeature
+      });
+      quotaResult = res2.data;
+      quotaError = res2.error;
+    }
 
     if (quotaError || !quotaResult?.allowed) {
       return new Response(JSON.stringify({ 
-        error: quotaError?.message || 'Günlük AI kullanım hakkınız doldu.' 
+        error: quotaError?.message || 'Günlük kullanım hakkınız doldu.' 
       }), {
         status: 429,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 4. İstek gövdesini al
-    const { prompt, base64Image }: RequestPayload = await req.json();
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-
     if (!GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY ortam değişkeni bulunamadı!');
     }
@@ -99,7 +112,6 @@ Deno.serve(async (req) => {
       ];
     }
 
-    // 5. Gemini API çağrısı
     const apiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

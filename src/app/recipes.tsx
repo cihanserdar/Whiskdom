@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { AppContext, Recipe } from '../context/AppContext';
 import { AIRecipeResult, formatUserRecipeWithAI, generateRecipeWithAI } from '../services/aiService';
-import { checkQuota, consumeQuota } from '../services/quotaService';
+import { checkQuota } from '../services/quotaService';
 import { supabase } from '../services/supabase';
 
 const CATEGORIES = [
@@ -192,7 +192,8 @@ export default function RecipesScreen() {
 
       if (result) {
         setAiRecipe(result);
-        await consumeQuota('aiRecipe');
+        // NOT: consumeQuota çağrısı kaldırıldı! Kota zaten Edge Function içinde güvenli düşüyor.
+        // Sadece güncel kalan hakkı UI'da tazelemek için checkQuota çağrıyoruz:
         const updatedStatus = await checkQuota('aiRecipe');
         setRemainingQuota(updatedStatus.remaining);
       } else {
@@ -1285,7 +1286,7 @@ export default function RecipesScreen() {
             <View style={styles.filterOptionsGroup}>
               {[
                 { label: 'Tüm Tarif Koleksiyonu', value: 'all' },
-                { label: '❤️️ Favori Tariflerim', value: 'favorites' },
+                { label: '❤ Favori Tariflerim', value: 'favorites' },
                 { label: '📜 Son Yapılan Tarifler', value: 'history' }
               ].map((opt) => (
                 <TouchableOpacity 
@@ -1447,7 +1448,7 @@ export default function RecipesScreen() {
                     onPress={() => selectedRecipe && handleOpenEditModal(selectedRecipe)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>✏️️ Düzenle</Text>
+                    <Text style={[styles.modalActionBtnText, { fontSize: 12 }]}>✏ Düzenle</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -1588,13 +1589,13 @@ const styles = StyleSheet.create({
   activeModalOptionBtn: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
   modalOptionText: { fontSize: 12, color: '#495057', fontWeight: '600', textAlign: 'center' },
   activeModalOptionText: { color: '#FFFFFF', fontWeight: '700' },
-  
+   
   modalActionBtn: { width: '100%', paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   modalActionBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
 
   detailTitle: { fontSize: 18, fontWeight: '900', color: '#1A1A1A', textAlign: 'center', marginBottom: 4 },
   detailTime: { fontSize: 12, color: '#D97706', fontWeight: '700', textAlign: 'center', marginBottom: 12 },
-  
+   
   portionBox: { backgroundColor: '#F8F9FA', padding: 10, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#E9ECEF' },
   portionTitle: { fontSize: 11, fontWeight: '800', color: '#495057', textAlign: 'center' },
   portionBtn: { flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF', alignItems: 'center' },
