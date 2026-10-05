@@ -70,6 +70,8 @@ interface UserProfileData {
   xp: number;
 }
 
+type IngredientItem = string | { name?: string; amount?: number; unit?: string };
+
 export default function RecipesScreen() {
   const { 
     inventory,
@@ -82,7 +84,6 @@ export default function RecipesScreen() {
     toggleFavorite,
     toggleHistory,
     getExpiringItemsByRange, 
-    getExpiredItems, 
     expiryThreshold, 
     setExpiryThreshold,
     fetchRecipesFromSupabase,
@@ -192,8 +193,6 @@ export default function RecipesScreen() {
 
       if (result) {
         setAiRecipe(result);
-        // NOT: consumeQuota çağrısı kaldırıldı! Kota zaten Edge Function içinde güvenli düşüyor.
-        // Sadece güncel kalan hakkı UI'da tazelemek için checkQuota çağrıyoruz:
         const updatedStatus = await checkQuota('aiRecipe');
         setRemainingQuota(updatedStatus.remaining);
       } else {
@@ -224,8 +223,14 @@ export default function RecipesScreen() {
     const finalTitle = aiFormatted?.title || newTitle;
     const finalCookingTime = aiFormatted?.cookingTime || newTime;
     const finalMainIngredient = aiFormatted?.mainIngredient || 'Genel';
-    const finalIngredientsWithQuantities = aiFormatted?.ingredientsWithQuantities || newRawIngredients.split('\n').map(i => i.trim()).filter(Boolean);
-    const finalIngredients = aiFormatted?.ingredients || finalIngredientsWithQuantities.map((item: any) => typeof item === 'string' ? item : item.name);
+    const rawItems: IngredientItem[] = aiFormatted?.ingredientsWithQuantities || newRawIngredients.split('\n').map(i => i.trim()).filter(Boolean);
+    
+    // Nesne dizisini kesin olarak string[] dizisine dönüştürüyoruz
+    const finalIngredientsWithQuantities: string[] = rawItems.map((item: IngredientItem) => 
+      typeof item === 'string' ? item : `${item.amount || 1} ${item.unit || 'adet'} ${item.name || ''}`
+    );
+
+    const finalIngredients = aiFormatted?.ingredients || finalIngredientsWithQuantities;
     const finalInstructions = aiFormatted?.instructions || newRawInstructions.split('\n').map(i => i.trim()).filter(Boolean);
 
     await saveRecipeToDatabase({
@@ -261,7 +266,7 @@ export default function RecipesScreen() {
     title: string;
     mainIngredient: string;
     ingredients: string[];
-    ingredientsWithQuantities: any[];
+    ingredientsWithQuantities: string[]; // <-- Tipi kesin olarak string[] yaptık
     cookingTime: string;
     instructions: string[];
   }) => {
@@ -271,7 +276,7 @@ export default function RecipesScreen() {
       category: newCategory,
       mainIngredient: data.mainIngredient,
       ingredients: data.ingredients,
-      ingredientsWithQuantities: data.ingredientsWithQuantities,
+      ingredientsWithQuantities: data.ingredientsWithQuantities, // Artık sorunsuz atanacak
       cookingTime: data.cookingTime,
       instructions: data.instructions,
       isUserCreated: true,
@@ -282,6 +287,7 @@ export default function RecipesScreen() {
       diets: newFormDiets,
       allergens: newFormAllergens,
     };
+    // ... devamı
 
     if (editingRecipeId) {
       const { error } = await supabase
@@ -343,7 +349,7 @@ export default function RecipesScreen() {
     setNewTime(recipe.cookingTime || '25 Dk');
     
     const rawIngsText = recipe.ingredientsWithQuantities 
-      ? recipe.ingredientsWithQuantities.map((i: any) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
+      ? recipe.ingredientsWithQuantities.map((i: IngredientItem) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
       : (recipe.ingredients || []).join('\n');
 
     setNewRawIngredients(rawIngsText);
@@ -362,7 +368,7 @@ export default function RecipesScreen() {
     setNewTime(recipe.cookingTime || '25 Dk');
 
     const rawIngsText = recipe.ingredientsWithQuantities 
-      ? recipe.ingredientsWithQuantities.map((i: any) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
+      ? recipe.ingredientsWithQuantities.map((i: IngredientItem) => typeof i === 'string' ? i : `${i.amount || 1} ${i.unit || 'adet'} ${i.name || ''}`).join('\n')
       : (recipe.ingredients || []).join('\n');
 
     setNewRawIngredients(rawIngsText);
@@ -455,30 +461,24 @@ export default function RecipesScreen() {
   const handleSaveAIRecipe = async () => {
     if (!aiRecipe) return;
 
-    const rawList: any[] = (aiRecipe.ingredientsWithQuantities && aiRecipe.ingredientsWithQuantities.length > 0) 
+    const rawList: IngredientItem[] = (aiRecipe.ingredientsWithQuantities && aiRecipe.ingredientsWithQuantities.length > 0) 
       ? aiRecipe.ingredientsWithQuantities 
       : [aiRecipe.mainIngredient, ...aiRecipe.missingIngredients];
 
-    const quantities = rawList.map((item: any) => {
+    const stringQuantities = rawList.map((item: IngredientItem) => {
       if (typeof item === 'string') {
-        return { name: item, amount: 1, unit: 'adet' };
+        return item;
       }
-      return {
-        name: item?.name || 'Malzeme',
-        amount: item?.amount || 1,
-        unit: item?.unit || 'adet'
-      };
+      return `${item?.amount || 1} ${item?.unit || 'adet'} ${item?.name || 'Malzeme'}`;
     });
-
-    const simpleIngredients = quantities.map((item: any) => item.name);
 
     const newRecipe: Recipe = {
       id: Date.now().toString(),
       title: aiRecipe.title,
       category: selectedAiCategory,
       mainIngredient: aiRecipe.mainIngredient,
-      ingredients: simpleIngredients,
-      ingredientsWithQuantities: quantities as any,
+      ingredients: stringQuantities,
+      ingredientsWithQuantities: stringQuantities,
       cookingTime: aiRecipe.cookingTime,
       instructions: aiRecipe.instructions,
       isAI: true,
@@ -938,7 +938,7 @@ export default function RecipesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: '85%' }]}>
-            <Text style={styles.modalTitle}>👨‍🍳 AI Şef Özel Tarif Oluşturucu</Text>
+            <Text style={styles.modalTitle}>👨‍‍🍳 AI Şef Özel Tarif Oluşturucu</Text>
             
             <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, alignSelf: 'center', marginVertical: 6 }}>
               <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '700' }}>
@@ -1420,7 +1420,7 @@ export default function RecipesScreen() {
 
               <Text style={styles.detailSubTitle}>📏 Gerekli Malzemeler ({portionCount} Kişilik):</Text>
               {selectedRecipe?.ingredientsWithQuantities ? (
-                selectedRecipe.ingredientsWithQuantities.map((item: any, idx: number) => {
+                selectedRecipe.ingredientsWithQuantities.map((item: IngredientItem, idx: number) => {
                   const ingredientStr = typeof item === 'string' ? item : `${item.amount || 1} ${item.unit || 'adet'} ${item.name || ''}`;
                   return (
                     <Text key={idx} style={styles.detailText}>
