@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   const context = useContext(AppContext);
 
   const user = context?.user;
-  const userProfile = context?.userProfile || { name: 'Kullanıcı', email: '', title: 'Çırak Şef 🍳', activeTitle: 'Çırak Şef 🍳', avatarUrl: '' };
+  const userProfile = context?.userProfile || { name: 'Kullanıcı', email: '', title: 'Çırak Şef 🍳', activeTitle: 'Çırak Şef 🍳', avatarUrl: '', tier: 'free' };
   const setUserProfile = context?.setUserProfile || (() => {});
   const userPreferences = context?.userPreferences || { diets: [], allergens: [] };
   const setUserPreferences = context?.setUserPreferences || (() => {});
@@ -60,7 +60,7 @@ export default function ProfileScreen() {
   const [badgesExpanded, setBadgesExpanded] = useState(false);
   
   const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
-  const [userTier, setUserTier] = useState<'free' | 'pro'>('free');
+  const userTier = userProfile.tier || 'free';
 
   const [nameInput, setNameInput] = useState(userProfile.name || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -75,24 +75,6 @@ export default function ProfileScreen() {
 
   const historyLen = history.length;
   const favoritesLen = favorites.length;
-
-  const fetchTierInfo = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('@whiskdom_user_quota_v1');
-      if (stored) {
-        const data = JSON.parse(stored);
-        setUserTier(data.tier || 'free');
-      } else {
-        setUserTier('free');
-      }
-    } catch (error) {
-      setUserTier('free');
-    }
-  };
-
-  useEffect(() => {
-    fetchTierInfo();
-  }, []);
 
   useEffect(() => {
     const syncUserDataWithSupabase = async () => {

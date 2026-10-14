@@ -1,16 +1,18 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import { InventoryItem } from '../context/AppContext';
+
+const NOTIFIED_EXPIRY_DATE_KEY = '@whiskdom_last_expiry_notification_date';
+const MAX_TOTAL_NOTIFICATIONS = 3;
 
 // Uygulamanın Expo Go'da çalışıp çalışmadığını kontrol et
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-// Expo Go ortamında çökmemesi için modülü güvenli şekilde yükle
-let Notifications: typeof import('expo-notifications') | null = null;
-
+// Expo Go ortamında çökmemesi için modülü güvenli şekilde yapılandır
 if (!isExpoGo) {
   try {
-    Notifications = require('expo-notifications');
-    Notifications?.setNotificationHandler({
+    Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
         shouldShowList: true,
@@ -19,24 +21,51 @@ if (!isExpoGo) {
       }),
     });
   } catch (error) {
-    // Kritik handler hatası sessizce geçilir veya hata yakalama mekanizmasına bağlanabilir
+    // Kritik handler hatası sessizce geçilir
   }
 }
 
-// SKT Bildirimlerini Planlama
-export const scheduleExpiryNotifications = async (inventoryItems: InventoryItem[]) => {
+// Bugün zaten bildirim gönderilip gönderilmediğini kontrol et
+const hasAlreadyNotifiedToday = async (): Promise<boolean> => {
+  try {
+    const lastDate = await AsyncStorage.getItem(NOTIFIED_EXPIRY_DATE_KEY);
+    const todayStr = new Date().toDateString();
+    return lastDate === todayStr;
+  } catch (error: unknown) {
+    return false;
+  }
+};
+
+const markExpiryNotifiedToday = async (): Promise<void> => {
+  try {
+    const todayStr = new Date().toDateString();
+    await AsyncStorage.setItem(NOTIFIED_EXPIRY_DATE_KEY, todayStr);
+  } catch (error: unknown) {
+    // Sessizce geçilir
+  }
+};
+
+// SKT Bildirimlerini Planlama (Toplu/Tekil mantık ve max 3 sınırıyla)
+export const scheduleExpiryNotifications = async (inventoryItems: InventoryItem[]): Promise<void> => {
   if (isExpoGo || !Notifications) {
     return;
   }
 
   try {
+    if (await hasAlreadyNotifiedToday()) {
+      return;
+    }
+
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
 
+    // Eski zamanlanmış bildirimleri temizle
     await Notifications.cancelAllScheduledNotificationsAsync();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    const expiringItems: InventoryItem[] = [];
 
     for (const item of inventoryItems) {
       if (!item.expiryDate) continue;
@@ -50,29 +79,47 @@ export const scheduleExpiryNotifications = async (inventoryItems: InventoryItem[
       const diffTime = expDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays === 2 || diffDays === 1) {
-        const triggerSeconds = Math.max(5, Math.floor((expDate.getTime() - Date.now()) / 1000));
-
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: '⚠️ Ürün SKT Yaklaşıyor!',
-            body: `'${item.name}' ürününün son kullanma tarihine az kaldı. Ziyan etmeden pişirmeye ne dersin?`,
-            sound: true,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: triggerSeconds > 0 ? triggerSeconds : 5,
-          },
-        });
+      if (diffDays === 2 || diffDays === 1 || diffDays === 0) {
+        expiringItems.push(item);
       }
     }
-  } catch (error) {
+
+    if (expiringItems.length === 0) return;
+
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    if (scheduled.length >= MAX_TOTAL_NOTIFICATIONS) {
+      return;
+    }
+
+    const notificationTitle = '⚠️ Ürün SKT Yaklaşıyor!';
+    let notificationBody = '';
+
+    if (expiringItems.length === 1) {
+      notificationBody = `'${expiringItems[0].name}' ürününün son kullanma tarihine az kaldı. Ziyan etmeden pişirmeye ne dersin?`;
+    } else {
+      notificationBody = `Tarihi yaklaşan ${expiringItems.length} adet ürünün var. Dolabını gözden geçirip ziyanı önlemeye ne dersin? 🌱`;
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: notificationTitle,
+        body: notificationBody,
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 5,
+      },
+    });
+
+    await markExpiryNotifiedToday();
+  } catch (error: unknown) {
     // Bildirim planlama hatası
   }
 };
 
 // Rozet ve Unvan Kazanma Bildirimi
-export const sendBadgeUnlockedNotification = async (badgeName: string, titleName: string) => {
+export const sendBadgeUnlockedNotification = async (badgeName: string, titleName: string): Promise<void> => {
   if (isExpoGo || !Notifications) {
     return;
   }
@@ -80,6 +127,11 @@ export const sendBadgeUnlockedNotification = async (badgeName: string, titleName
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
+
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    if (scheduled.length >= MAX_TOTAL_NOTIFICATIONS) {
+      return;
+    }
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -92,7 +144,7 @@ export const sendBadgeUnlockedNotification = async (badgeName: string, titleName
         seconds: 1,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     // Rozet bildirim hatası
   }
 };

@@ -46,6 +46,7 @@ export interface UserProfile {
   title: string;
   activeTitle: string;
   avatarUrl: string;
+  tier: string;
 }
 
 export interface WasteStats {
@@ -194,6 +195,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     title: 'Çırak Şef 🍳',
     activeTitle: 'Çırak Şef 🍳',
     avatarUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+    tier: 'free',
   });
 
   const [mealPlan, setMealPlan] = useState<WeeklyMealPlan>({
@@ -502,6 +504,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           title: profileData.title || 'Çırak Şef 🍳',
           activeTitle: profileData.active_title || profileData.title || 'Çırak Şef 🍳',
           avatarUrl: profileData.avatar_url || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+          tier: profileData.tier || 'free',
         });
         setUserPreferencesState({
           diets: profileData.diets || [],
@@ -728,6 +731,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       title: profile.title,
       active_title: profile.activeTitle,
       avatar_url: profile.avatarUrl,
+      tier: profile.tier,
     }).eq('id', user.id);
   };
 

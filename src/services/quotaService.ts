@@ -1,28 +1,31 @@
 import { supabase } from './supabase';
 
-// 📦 Paket Limitleri Tanımı (AI Şef: 5, Fiş: 1)
+// 📦 Paket Limitleri Tanımı
 export const TIER_LIMITS = {
   free: { aiRecipeLimit: 5, receiptLimit: 1 },
-  pro: { aiRecipeLimit: 20, receiptLimit: 15 },      
+  pro: { aiRecipeLimit: 15, receiptLimit: 3 },      
   premium: { aiRecipeLimit: 999, receiptLimit: 999 }  
 };
 
-// 1️⃣ Hak Kontrolü (İstek Atılmadan Önce Çağrılır - 24 Saatlik Kayan Sayaç)
-export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowed: boolean; remaining: number; resetTimeText: string }> {
+// 1️⃣ Hak Kontrolü (Güncellenmiş Hali)
+export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowed: boolean; remaining: number; limit: number; resetTimeText: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { allowed: false, remaining: 0, resetTimeText: '' };
+    if (!user) return { allowed: false, remaining: 0, limit: 5, resetTimeText: '' };
 
-    const limit = type === 'aiRecipe' ? TIER_LIMITS.free.aiRecipeLimit : TIER_LIMITS.free.receiptLimit;
-
-    // Dinamik anahtar hatasını önlemek için sabit alanlar üzerinden çekiyoruz
+    // Kullanıcının profilinden hem tier hem de kotaları çekiyoruz
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('ai_chef_quota, ai_chef_reset_at, receipt_quota, receipt_reset_at')
+      .select('tier, ai_chef_quota, ai_chef_reset_at, receipt_quota, receipt_reset_at')
       .eq('id', user.id)
       .single();
 
-    if (error || !profile) return { allowed: false, remaining: limit, resetTimeText: '' };
+    if (error || !profile) return { allowed: false, remaining: 0, limit: 5, resetTimeText: '' };
+
+    // Kullanıcının tier değerine göre doğru üst limiti belirliyoruz
+    const userTier = (profile.tier && TIER_LIMITS[profile.tier as keyof typeof TIER_LIMITS]) ? profile.tier : 'free';
+    const limits = TIER_LIMITS[userTier as keyof typeof TIER_LIMITS];
+    const limit = type === 'aiRecipe' ? limits.aiRecipeLimit : limits.receiptLimit;
 
     let currentQuota = type === 'aiRecipe' ? (profile.ai_chef_quota ?? limit) : (profile.receipt_quota ?? limit);
     let resetAt = type === 'aiRecipe' ? profile.ai_chef_reset_at : profile.receipt_reset_at;
@@ -57,9 +60,10 @@ export async function checkQuota(type: 'aiRecipe' | 'receipt'): Promise<{ allowe
       resetTimeText = `${String(hours).padStart(2, '0')} Saat ${String(minutes).padStart(2, '0')} Dakika ${String(seconds).padStart(2, '0')} Saniye`;
     }
 
-    return { allowed, remaining, resetTimeText };
+    // Artık 'limit' değerini de dışarıya dönüyoruz!
+    return { allowed, remaining, limit, resetTimeText };
   } catch {
-    return { allowed: false, remaining: 0, resetTimeText: '' };
+    return { allowed: false, remaining: 0, limit: 5, resetTimeText: '' };
   }
 }
 

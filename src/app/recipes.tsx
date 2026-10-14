@@ -102,7 +102,9 @@ export default function RecipesScreen() {
   const [aiCategoryModalVisible, setAiCategoryModalVisible] = useState(false);
   const [selectedAiCategory, setSelectedAiCategory] = useState<string>('Ana Yemek');
   const [aiIngredientMode, setAiIngredientMode] = useState<'complete' | 'missing' | 'free'>('free');
+  
   const [remainingQuota, setRemainingQuota] = useState<number | null>(null);
+  const [maxAiRecipeLimit, setMaxAiRecipeLimit] = useState<number>(5); // Dinamik limit state'i eklendi
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [prefModalVisible, setPrefModalVisible] = useState(false);
@@ -135,19 +137,27 @@ export default function RecipesScreen() {
 
   useEffect(() => {
     fetchRecipesFromSupabase();
+    updateAiQuota();
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedCategory, collectionFilter, ingredientFilter, recipesPerPage]);
 
-  const handleOpenAiModal = async () => {
+  const updateAiQuota = async () => {
     try {
       const quotaStatus = await checkQuota('aiRecipe');
       setRemainingQuota(quotaStatus.remaining);
+      if (quotaStatus.limit !== undefined) {
+        setMaxAiRecipeLimit(quotaStatus.limit);
+      }
     } catch {
       // Sessizce geçilir
     }
+  };
+
+  const handleOpenAiModal = async () => {
+    await updateAiQuota();
     setAiCategoryModalVisible(true);
   };
 
@@ -168,6 +178,9 @@ export default function RecipesScreen() {
   const handleGenerateAIRecipe = async (targetCategory: string, ingredientMode: 'complete' | 'missing' | 'free') => {
     try {
       const quotaStatus = await checkQuota('aiRecipe');
+      if (quotaStatus.limit !== undefined) {
+        setMaxAiRecipeLimit(quotaStatus.limit);
+      }
 
       if (!quotaStatus.allowed) {
         Alert.alert(
@@ -194,8 +207,7 @@ export default function RecipesScreen() {
 
       if (result) {
         setAiRecipe(result);
-        const updatedStatus = await checkQuota('aiRecipe');
-        setRemainingQuota(updatedStatus.remaining);
+        await updateAiQuota();
       } else {
         Alert.alert("Hata", "AI tarif oluştururken bir sorun oluştu. Lütfen tekrar deneyin.");
       }
@@ -943,7 +955,7 @@ export default function RecipesScreen() {
             
             <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, alignSelf: 'center', marginVertical: 6 }}>
               <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '700' }}>
-                ✨ Günlük Kalan AI Hak: {remainingQuota !== null ? `${remainingQuota} / 5` : 'Yükleniyor...'}
+                ✨ Günlük Kalan AI Hak: {remainingQuota !== null ? `${remainingQuota} / ${maxAiRecipeLimit}` : 'Yükleniyor...'}
               </Text>
             </View>
 

@@ -114,7 +114,8 @@ export default function HomeScreen() {
   const [receiptImageUri, setReceiptImageUri] = useState<string | null>(null);
   
   const [remainingReceiptQuota, setRemainingReceiptQuota] = useState<number | null>(null);
-
+  const [maxReceiptLimit, setMaxReceiptLimit] = useState<number>(1);
+  
   const [filteredBrands, setFilteredBrands] = useState<string[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<string[]>([]);
 
@@ -126,6 +127,9 @@ export default function HomeScreen() {
     try {
       const quotaStatus = await checkQuota('receipt');
       setRemainingReceiptQuota(quotaStatus.remaining);
+      if (quotaStatus.limit !== undefined) {
+        setMaxReceiptLimit(quotaStatus.limit);
+      }
     } catch (e) {
       // Sessizce geçilir
     }
@@ -134,6 +138,9 @@ export default function HomeScreen() {
   const analyzeReceiptWithGemini = async (base64Image: string, imageUri: string) => {
     try {
       const quotaStatus = await checkQuota('receipt');
+      if (quotaStatus.limit !== undefined) {
+        setMaxReceiptLimit(quotaStatus.limit);
+      }
 
       if (!quotaStatus.allowed) {
         Alert.alert(
@@ -378,7 +385,7 @@ export default function HomeScreen() {
     setIsModalVisible(true);
   };
 
-  const handleValueChange = (event: { type: string }, selectedDate?: Date) => {
+  const handleValueChange = (event: any, selectedDate?: Date) => {
     if (event.type === 'set' && selectedDate) {
       setSelectedDateObj(selectedDate);
       const day = String(selectedDate.getDate()).padStart(2, '0');
@@ -514,7 +521,7 @@ export default function HomeScreen() {
 
       <View style={{ backgroundColor: Colors.surface, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 8, borderWidth: 1, borderColor: Colors.border }}>
         <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '800' }}>
-          🧾 Günlük Kalan Fiş Tarama Hakkı: {remainingReceiptQuota !== null ? `${remainingReceiptQuota} / 1` : 'Yükleniyor...'}
+          🧾 Günlük Kalan Fiş Tarama Hakkı: {remainingReceiptQuota !== null ? `${remainingReceiptQuota} / ${maxReceiptLimit}` : 'Yükleniyor...'}
         </Text>
       </View>
 
@@ -540,6 +547,10 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={10}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🥬</Text>
@@ -594,7 +605,7 @@ export default function HomeScreen() {
 
                   <View style={styles.metaRow}>
                     <Text style={styles.itemQuantity}>Miktar: {item.amount} {item.unit}</Text>
-                    {item.expiryDate ? <Text style={styles.expiryDateText}>• SKT: {item.expiryDate}</Text> : null}
+                    {item.expiryDate ? <Text style={styles.expiryDateText}>SKT: {item.expiryDate}</Text> : null}
                   </View>
                 </View>
 
@@ -666,7 +677,7 @@ export default function HomeScreen() {
                       <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textDark }}>{item.name}</Text>
                         <Text style={{ fontSize: 11, color: Colors.grayText }}>
-                          {item.brand ? `${item.brand} • ` : ''}{item.amount} {item.unit}
+                          {item.brand ? `${item.brand} - ` : ''}{item.amount} {item.unit}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -878,7 +889,12 @@ export default function HomeScreen() {
           value={selectedDateObj}
           mode="date"
           display="default"
-          onChange={handleValueChange}
+          onValueChange={(event, selectedDate) => {
+            handleValueChange(event, selectedDate);
+          }}
+          onDismiss={() => {
+            setIsDatePickerVisible(false);
+          }}
         />
       )}
     </View>
