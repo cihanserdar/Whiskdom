@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 import { AppContext, Recipe } from '../context/AppContext';
 import { AIRecipeResult, formatUserRecipeWithAI, generateRecipeWithAI } from '../services/aiService';
 import { checkQuota } from '../services/quotaService';
@@ -198,8 +199,10 @@ export default function RecipesScreen() {
       } else {
         Alert.alert("Hata", "AI tarif oluştururken bir sorun oluştu. Lütfen tekrar deneyin.");
       }
-    } catch {
+    } catch (error: unknown) {
       setAiLoading(false);
+      const message = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
+      Alert.alert("Hata", message);
     }
   };
 
@@ -225,7 +228,6 @@ export default function RecipesScreen() {
     const finalMainIngredient = aiFormatted?.mainIngredient || 'Genel';
     const rawItems: IngredientItem[] = aiFormatted?.ingredientsWithQuantities || newRawIngredients.split('\n').map(i => i.trim()).filter(Boolean);
     
-    // Nesne dizisini kesin olarak string[] dizisine dönüştürüyoruz
     const finalIngredientsWithQuantities: string[] = rawItems.map((item: IngredientItem) => 
       typeof item === 'string' ? item : `${item.amount || 1} ${item.unit || 'adet'} ${item.name || ''}`
     );
@@ -266,7 +268,7 @@ export default function RecipesScreen() {
     title: string;
     mainIngredient: string;
     ingredients: string[];
-    ingredientsWithQuantities: string[]; // <-- Tipi kesin olarak string[] yaptık
+    ingredientsWithQuantities: string[];
     cookingTime: string;
     instructions: string[];
   }) => {
@@ -276,7 +278,7 @@ export default function RecipesScreen() {
       category: newCategory,
       mainIngredient: data.mainIngredient,
       ingredients: data.ingredients,
-      ingredientsWithQuantities: data.ingredientsWithQuantities, // Artık sorunsuz atanacak
+      ingredientsWithQuantities: data.ingredientsWithQuantities,
       cookingTime: data.cookingTime,
       instructions: data.instructions,
       isUserCreated: true,
@@ -287,7 +289,6 @@ export default function RecipesScreen() {
       diets: newFormDiets,
       allergens: newFormAllergens,
     };
-    // ... devamı
 
     if (editingRecipeId) {
       const { error } = await supabase
@@ -654,7 +655,7 @@ export default function RecipesScreen() {
         />
         {searchQuery !== '' && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
-            <Text style={{ fontSize: 12, color: '#6C757D', fontWeight: '700' }}>✕</Text>
+            <Text style={{ fontSize: 12, color: Colors.grayText, fontWeight: '700' }}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -669,7 +670,7 @@ export default function RecipesScreen() {
                 selectedCategory === cat && styles.categoryPillActive,
                 cat === 'Whiskdom Özel' && { borderColor: '#7E22CE' },
                 cat === 'Whiskdom Özel' && selectedCategory === cat && { backgroundColor: '#7E22CE' },
-                cat === 'Sizin Tarifleriniz' && { borderColor: '#10B981', backgroundColor: selectedCategory === cat ? '#10B981' : '#ECFDF5' },
+                cat === 'Sizin Tarifleriniz' && { borderColor: Colors.primary, backgroundColor: selectedCategory === cat ? Colors.primary : Colors.inputBg },
                 cat === 'Topluluk Tarifleri' && { borderColor: '#3B82F6', backgroundColor: selectedCategory === cat ? '#3B82F6' : '#EFF6FF' },
               ]}
               onPress={() => setSelectedCategory(cat)}
@@ -681,7 +682,7 @@ export default function RecipesScreen() {
                   styles.categoryPillText,
                   selectedCategory === cat && styles.categoryPillTextActive,
                   cat === 'Whiskdom Özel' && selectedCategory !== cat && { color: '#7E22CE', fontWeight: '800' },
-                  cat === 'Sizin Tarifleriniz' && selectedCategory !== cat && { color: '#059669', fontWeight: '800' },
+                  cat === 'Sizin Tarifleriniz' && selectedCategory !== cat && { color: Colors.primary, fontWeight: '800' },
                   cat === 'Topluluk Tarifleri' && selectedCategory !== cat && { color: '#2563EB', fontWeight: '800' },
                 ]}
               >
@@ -699,7 +700,7 @@ export default function RecipesScreen() {
         activeOpacity={0.85}
       >
         {aiLoading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={Colors.white} />
         ) : (
           <Text style={styles.aiButtonText}>✨ AI Şef ile Özel Tarif Üret</Text>
         )}
@@ -751,7 +752,7 @@ export default function RecipesScreen() {
 
           <Text style={styles.recipeTitle}>{aiRecipe.title}</Text>
           <Text style={styles.ingredientText}>
-            Kullanılacak Malzeme: <Text style={{ fontWeight: '800', color: '#1A1A1A' }}>{aiRecipe.mainIngredient}</Text>
+            Kullanılacak Malzeme: <Text style={{ fontWeight: '800', color: Colors.textDark }}>{aiRecipe.mainIngredient}</Text>
           </Text>
 
           <View style={styles.missingBox}>
@@ -764,7 +765,7 @@ export default function RecipesScreen() {
           </View>
 
           <View style={styles.aiCardActions}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#1A1A1A' }]} onPress={handleSaveAIRecipe} activeOpacity={0.8}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.textDark }]} onPress={handleSaveAIRecipe} activeOpacity={0.8}>
               <Text style={styles.buttonText}>📌 Listeye Ekle</Text>
             </TouchableOpacity>
 
@@ -802,8 +803,8 @@ export default function RecipesScreen() {
               >
                 <View style={styles.cardHeaderRow}>
                   <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                    <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', maxWidth: '70%' }}>
-                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: '#374151', fontWeight: '800', fontSize: 10 }}>🍲 {item.category || 'Ana Yemek'}</Text>
+                    <View style={{ backgroundColor: Colors.inputBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: Colors.border, maxWidth: '70%' }}>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: Colors.textDark, fontWeight: '800', fontSize: 10 }}>🍲 {item.category || 'Ana Yemek'}</Text>
                     </View>
 
                     {item.is_approved && (
@@ -818,8 +819,8 @@ export default function RecipesScreen() {
                     )}
 
                     {Boolean(item.isUserCreated || item.is_user_created) && !item.isAI && (
-                      <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#A7F3D0' }}>
-                        <Text style={{ color: '#047857', fontWeight: '800', fontSize: 10 }}>💚 Sizin Tarifiniz</Text>
+                      <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: Colors.primary }}>
+                        <Text style={{ color: Colors.primary, fontWeight: '800', fontSize: 10 }}>💚 Sizin Tarifiniz</Text>
                       </View>
                     )}
 
@@ -841,14 +842,14 @@ export default function RecipesScreen() {
                 
                 <Text style={styles.recipeTitle}>{item.title}</Text>
                 <Text style={styles.ingredientText}>
-                  Ana Malzeme: <Text style={{ fontWeight: '700', color: '#1A1A1A' }}>{item.mainIngredient}</Text>
+                  Ana Malzeme: <Text style={{ fontWeight: '700', color: Colors.textDark }}>{item.mainIngredient}</Text>
                 </Text>
                 
-                <View style={[styles.missingBox, dynamicMissing.length === 0 && { backgroundColor: '#F4FBF7', borderColor: '#D1E7DD' }]}>
-                  <Text style={[styles.missingTitle, dynamicMissing.length === 0 && { color: '#0F5132' }]}>
+                <View style={[styles.missingBox, dynamicMissing.length === 0 && { backgroundColor: Colors.softSage, borderColor: Colors.primary }]}>
+                  <Text style={[styles.missingTitle, dynamicMissing.length === 0 && { color: Colors.primary }]}>
                     {dynamicMissing.length === 0 ? '✅ Tam Malzemeli Tarif' : `Eksik Malzemeler (${dynamicMissing.length}):`}
                   </Text>
-                  <Text style={[styles.missingText, dynamicMissing.length === 0 && { color: '#198754' }]}>
+                  <Text style={[styles.missingText, dynamicMissing.length === 0 && { color: Colors.primary }]}>
                     {dynamicMissing.length === 0 ? 'Dolabında hepsi mevcut!' : dynamicMissing.join(', ')}
                   </Text>
                 </View>
@@ -867,7 +868,7 @@ export default function RecipesScreen() {
                   <TouchableOpacity 
                     style={[
                       styles.cartButton, 
-                      { backgroundColor: isCooked ? '#9B1C1C' : '#1A1A1A', flex: 1 }
+                      { backgroundColor: isCooked ? '#9B1C1C' : Colors.textDark, flex: 1 }
                     ]}
                     onPress={() => handleToggleCook(item.id, item.title)}
                     activeOpacity={0.8}
@@ -938,7 +939,7 @@ export default function RecipesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: '85%' }]}>
-            <Text style={styles.modalTitle}>👨‍‍🍳 AI Şef Özel Tarif Oluşturucu</Text>
+            <Text style={styles.modalTitle}>👨‍🍳 AI Şef Özel Tarif Oluşturucu</Text>
             
             <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, alignSelf: 'center', marginVertical: 6 }}>
               <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '700' }}>
@@ -1001,7 +1002,7 @@ export default function RecipesScreen() {
 
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
               <TouchableOpacity 
-                style={[styles.modalActionBtn, { backgroundColor: '#6C757D', flex: 1 }]}
+                style={[styles.modalActionBtn, { backgroundColor: Colors.grayText, flex: 1 }]}
                 onPress={() => setAiCategoryModalVisible(false)}
               >
                 <Text style={styles.modalActionBtnText}>İptal</Text>
@@ -1016,7 +1017,7 @@ export default function RecipesScreen() {
                 }}
               >
                 {aiLoading ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={Colors.white} size="small" />
                 ) : (
                   <Text style={styles.modalActionBtnText}>Tarif Üret ✨</Text>
                 )}
@@ -1031,12 +1032,12 @@ export default function RecipesScreen() {
           <View style={[styles.modalContainer, { maxHeight: '90%' }]}>
             <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>{editingRecipeId ? '✏️ Tarifi Düzenle' : '👨‍🍳 Kendi Tarifini Ekle'}</Text>
-              <Text style={{ fontSize: 11, color: '#6C757D', textAlign: 'center', marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, color: Colors.grayText, textAlign: 'center', marginBottom: 12 }}>
                 İster AI yardımıyla düzenle, ister direkt kendi yazdığın gibi kaydet!
               </Text>
 
               <Text style={styles.inputLabel}>Tarif Adı:</Text>
-              <TextInput style={styles.formInput} placeholder="Örn: Annemin Özel Köftesi" value={newTitle} onChangeText={setNewTitle} />
+              <TextInput style={styles.formInput} placeholder="Örn: Annemin Özel Köftesi" placeholderTextColor="#9CA3AF" value={newTitle} onChangeText={setNewTitle} />
 
               <Text style={styles.inputLabel}>Kategori Seçin:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
@@ -1130,13 +1131,14 @@ export default function RecipesScreen() {
               </View>
 
               <Text style={styles.inputLabel}>Pişirme Süresi:</Text>
-              <TextInput style={styles.formInput} placeholder="Örn: 25 Dk" value={newTime} onChangeText={setNewTime} />
+              <TextInput style={styles.formInput} placeholder="Örn: 25 Dk" placeholderTextColor="#9CA3AF" value={newTime} onChangeText={setNewTime} />
 
               <Text style={styles.inputLabel}>Gerekli Malzemeler (Her satıra bir malzeme):</Text>
               <TextInput 
                 style={[styles.formInput, { height: 90, textAlignVertical: 'top' }]} 
                 multiline 
                 placeholder="Örn:&#10;500g kıyma&#10;1 soğan&#10;1 yumurta" 
+                placeholderTextColor="#9CA3AF"
                 value={newRawIngredients} 
                 onChangeText={setNewRawIngredients} 
               />
@@ -1146,6 +1148,7 @@ export default function RecipesScreen() {
                 style={[styles.formInput, { height: 110, textAlignVertical: 'top' }]} 
                 multiline 
                 placeholder="Örn:&#10;Soğanı rendeleyip kıymaya ekleyin. Yoğurup şekil verin ve kızartın." 
+                placeholderTextColor="#9CA3AF"
                 value={newRawInstructions} 
                 onChangeText={setNewRawInstructions} 
               />
@@ -1157,14 +1160,14 @@ export default function RecipesScreen() {
               >
                 <Text style={{ fontSize: 16 }}>{isSubmittedToLibrary ? '✅' : '⬜'}</Text>
                 <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#1A1A1A' }}>Whiskdom Kütüphanesine Öner</Text>
-                  <Text style={{ fontSize: 10, color: '#6C757D' }}>Onaylanırsa genel kütüphaneye eklenir ve XP kazanırsınız!</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: Colors.textDark }}>Whiskdom Kütüphanesine Öner</Text>
+                  <Text style={{ fontSize: 10, color: Colors.grayText }}>Onaylanırsa genel kütüphaneye eklenir ve XP kazanırsınız!</Text>
                 </View>
               </TouchableOpacity>
             </ScrollView>
 
             <TouchableOpacity 
-              style={[styles.modalActionBtn, { backgroundColor: '#6C757D', marginTop: 10 }]}
+              style={[styles.modalActionBtn, { backgroundColor: Colors.grayText, marginTop: 10 }]}
               onPress={() => setAddRecipeModalVisible(false)}
               disabled={isFormattingAI}
             >
@@ -1181,12 +1184,12 @@ export default function RecipesScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.modalActionBtn, { backgroundColor: '#10B981', flex: 1.2 }]}
+                style={[styles.modalActionBtn, { backgroundColor: Colors.primary, flex: 1.2 }]}
                 onPress={handleCreateOrUpdateUserRecipeWithAI}
                 disabled={isFormattingAI}
               >
                 {isFormattingAI ? (
-                  <ActivityIndicator color="#FFF" />
+                  <ActivityIndicator color={Colors.white} />
                 ) : (
                   <Text style={styles.modalActionBtnText}>✨ AI ile Düzenle & Kaydet</Text>
                 )}
@@ -1202,22 +1205,22 @@ export default function RecipesScreen() {
             <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
               <Text style={{ fontSize: 28 }}>👨‍🍳</Text>
             </View>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A' }}>{selectedUserProfile?.name}</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: Colors.textDark }}>{selectedUserProfile?.name}</Text>
             <Text style={{ fontSize: 12, color: '#2563EB', fontWeight: '800', marginTop: 2, marginBottom: 16 }}>{selectedUserProfile?.badge}</Text>
 
             <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginBottom: 20 }}>
-              <View style={{ flex: 1, backgroundColor: '#F8F9FA', padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E9ECEF' }}>
-                <Text style={{ fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>{selectedUserProfile?.recipeCount}</Text>
-                <Text style={{ fontSize: 10, color: '#6C757D', fontWeight: '700', marginTop: 2 }}>Tarif</Text>
+              <View style={{ flex: 1, backgroundColor: Colors.inputBg, padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}>
+                <Text style={{ fontSize: 16, fontWeight: '900', color: Colors.textDark }}>{selectedUserProfile?.recipeCount}</Text>
+                <Text style={{ fontSize: 10, color: Colors.grayText, fontWeight: '700', marginTop: 2 }}>Tarif</Text>
               </View>
-              <View style={{ flex: 1, backgroundColor: '#F8F9FA', padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E9ECEF' }}>
+              <View style={{ flex: 1, backgroundColor: Colors.inputBg, padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}>
                 <Text style={{ fontSize: 16, fontWeight: '900', color: '#7E22CE' }}>{selectedUserProfile?.xp} XP</Text>
-                <Text style={{ fontSize: 10, color: '#6C757D', fontWeight: '700', marginTop: 2 }}>Şef Puanı</Text>
+                <Text style={{ fontSize: 10, color: Colors.grayText, fontWeight: '700', marginTop: 2 }}>Şef Puanı</Text>
               </View>
             </View>
 
             <TouchableOpacity 
-              style={[styles.modalActionBtn, { backgroundColor: '#1A1A1A' }]}
+              style={[styles.modalActionBtn, { backgroundColor: Colors.textDark }]}
               onPress={() => setProfileModalVisible(false)}
               activeOpacity={0.8}
             >
@@ -1267,7 +1270,7 @@ export default function RecipesScreen() {
             </View>
 
             <TouchableOpacity 
-              style={[styles.modalActionBtn, { backgroundColor: '#1A1A1A', marginTop: 20 }]}
+              style={[styles.modalActionBtn, { backgroundColor: Colors.textDark, marginTop: 20 }]}
               onPress={() => setPrefModalVisible(false)}
               activeOpacity={0.8}
             >
@@ -1344,7 +1347,7 @@ export default function RecipesScreen() {
             </View>
 
             <TouchableOpacity 
-              style={[styles.modalActionBtn, { backgroundColor: '#1A1A1A', marginTop: 15 }]}
+              style={[styles.modalActionBtn, { backgroundColor: Colors.textDark, marginTop: 15 }]}
               onPress={() => setFilterModalVisible(false)}
               activeOpacity={0.8}
             >
@@ -1391,7 +1394,7 @@ export default function RecipesScreen() {
                       onPress={() => setPortionCount(p)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.portionBtnText, portionCount === p && { color: '#fff' }]}>
+                      <Text style={[styles.portionBtnText, portionCount === p && { color: Colors.white }]}>
                         {p} Kişilik
                       </Text>
                     </TouchableOpacity>
@@ -1399,9 +1402,9 @@ export default function RecipesScreen() {
                 </View>
               </View>
 
-              <View style={{ backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', marginVertical: 10 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>💡 Pratik Kaşık Ölçüleri (Referans):</Text>
-                <Text style={{ fontSize: 10, color: '#6B7280', lineHeight: 15 }}>
+              <View style={{ backgroundColor: Colors.inputBg, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, marginVertical: 10 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textDark, marginBottom: 4 }}>💡 Pratik Kaşık Ölçüleri (Referans):</Text>
+                <Text style={{ fontSize: 10, color: Colors.grayText, lineHeight: 15 }}>
                   • 1 Çay Kaşığı ≈ 3g / 3ml{'\n'}
                   • 1 Tatlı Kaşığı ≈ 5g / 5ml{'\n'}
                   • 1 Yemek Kaşığı ≈ 15g / 15ml
@@ -1483,7 +1486,7 @@ export default function RecipesScreen() {
             </ScrollView>
 
             <TouchableOpacity 
-              style={[styles.modalActionBtn, { backgroundColor: '#1A1A1A', marginTop: 15 }]}
+              style={[styles.modalActionBtn, { backgroundColor: Colors.textDark, marginTop: 15 }]}
               onPress={() => setSelectedRecipe(null)}
               activeOpacity={0.8}
             >
@@ -1498,40 +1501,40 @@ export default function RecipesScreen() {
 }
 
 const styles = StyleSheet.create({
-  totalCountText: { fontSize: 10, color: '#6C757D', fontWeight: '600', marginTop: 2 },
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  totalCountText: { fontSize: 10, color: Colors.grayText, fontWeight: '600', marginTop: 2 },
+  container: { flex: 1, backgroundColor: Colors.surface },
   scrollContent: { paddingTop: 54, paddingHorizontal: 18, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 },
-  subtitle: { fontSize: 12, color: '#6C757D', marginTop: 2, fontWeight: '600', marginBottom: 12 },
+  title: { fontSize: 24, fontWeight: '900', color: Colors.textDark, letterSpacing: -0.5 },
+  subtitle: { fontSize: 12, color: Colors.grayText, marginTop: 2, fontWeight: '600', marginBottom: 12 },
 
-  addRecipeBtnHeader: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  addRecipeBtnHeaderText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+  addRecipeBtnHeader: { backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  addRecipeBtnHeaderText: { color: Colors.white, fontWeight: '800', fontSize: 12 },
 
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   searchIcon: { fontSize: 14, marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 13, color: '#1A1A1A', padding: 0 },
+  searchInput: { flex: 1, fontSize: 13, color: Colors.textDark, padding: 0 },
 
-  categoryPill: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: '#E9ECEF', borderWidth: 1, borderColor: '#E9ECEF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  categoryPillActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  categoryPill: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.border, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  categoryPillActive: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   categoryPillText: { fontSize: 12, fontWeight: '700', color: '#495057' },
-  categoryPillTextActive: { color: '#FFFFFF' },
+  categoryPillTextActive: { color: Colors.white },
 
-  modalCategoryPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF' },
-  modalCategoryPillActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  modalCategoryPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
+  modalCategoryPillActive: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   modalCategoryPillText: { fontSize: 11, fontWeight: '700', color: '#495057' },
-  modalCategoryPillTextActive: { color: '#FFFFFF' },
+  modalCategoryPillTextActive: { color: Colors.white },
 
-  modalMultiSelectPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF' },
-  modalMultiSelectPillActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  modalMultiSelectPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  modalMultiSelectPillActive: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   modalMultiSelectText: { fontSize: 11, fontWeight: '600', color: '#495057' },
-  modalMultiSelectTextActive: { color: '#FFFFFF', fontWeight: '800' },
+  modalMultiSelectTextActive: { color: Colors.white, fontWeight: '800' },
 
-  aiButton: { backgroundColor: '#1A1A1A', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginBottom: 10, elevation: 1 },
-  aiButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  aiButton: { backgroundColor: Colors.textDark, paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginBottom: 10, elevation: 1 },
+  aiButtonText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
 
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  mainFilterBtn: { flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E9ECEF' },
-  mainFilterBtnText: { color: '#1A1A1A', fontWeight: '700', fontSize: 12 },
+  mainFilterBtn: { flex: 1, backgroundColor: Colors.white, paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  mainFilterBtnText: { color: Colors.textDark, fontWeight: '700', fontSize: 12 },
 
   sktWarningBanner: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#F59E0B', borderRadius: 12, padding: 12, marginBottom: 14 },
   sktWarningTitle: { fontSize: 12, fontWeight: '800', color: '#B45309', marginBottom: 2 },
@@ -1541,71 +1544,71 @@ const styles = StyleSheet.create({
   aiCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   aiBadgeText: { color: '#7E22CE', fontWeight: '800', fontSize: 12 },
   timeBadge: { backgroundColor: '#E9D5FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 11, color: '#6B21A8', fontWeight: '700' },
-  aiNoteText: { fontSize: 12, color: '#6C757D', marginBottom: 10, fontWeight: '500' },
+  aiNoteText: { fontSize: 12, color: Colors.grayText, marginBottom: 10, fontWeight: '500' },
   aiCardActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
 
-  recipeCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
+  recipeCard: { backgroundColor: Colors.white, padding: 14, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: Colors.border, elevation: 1 },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   starBtn: { padding: 2 },
   urgentCard: { borderWidth: 1.5, borderColor: '#D97706' },
   urgentBadge: { color: '#D97706', fontWeight: '800', fontSize: 11, marginBottom: 4 },
-  recipeTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
+  recipeTitle: { fontSize: 16, fontWeight: '800', color: Colors.textDark },
   ingredientText: { fontSize: 12, color: '#495057', marginVertical: 4 },
-  missingBox: { backgroundColor: '#F8F9FA', padding: 10, borderRadius: 10, marginVertical: 8, borderWidth: 1, borderColor: '#E9ECEF' },
+  missingBox: { backgroundColor: Colors.white, padding: 10, borderRadius: 10, marginVertical: 8, borderWidth: 1, borderColor: Colors.border },
   missingTitle: { fontSize: 11, fontWeight: '800', color: '#D97706' },
   missingText: { fontSize: 12, color: '#D97706', fontWeight: '600', marginTop: 1 },
   cardActionGroup: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  cartButton: { backgroundColor: '#1A1A1A', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  cartButton: { backgroundColor: Colors.textDark, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: Colors.white, fontWeight: '700', fontSize: 12 },
 
-  paginationContainer: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, marginTop: 6, marginBottom: 14, borderWidth: 1, borderColor: '#E9ECEF', alignItems: 'center' },
+  paginationContainer: { backgroundColor: Colors.white, padding: 14, borderRadius: 14, marginTop: 6, marginBottom: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
   perPageSelectorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
   paginationLabel: { fontSize: 12, fontWeight: '700', color: '#495057', marginRight: 4 },
-  perPageBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF' },
-  perPageBtnActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  perPageBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
+  perPageBtnActive: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   perPageBtnText: { fontSize: 11, fontWeight: '700', color: '#495057' },
-  perPageBtnTextActive: { color: '#FFFFFF' },
-  pageNavRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 6, borderTopWidth: 1, borderTopColor: '#F1F3F5', paddingTop: 10 },
-  pageNavBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#E9ECEF' },
-  pageNavBtnText: { fontSize: 11, fontWeight: '700', color: '#1A1A1A' },
+  perPageBtnTextActive: { color: Colors.white },
+  pageNavRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 6, borderTopWidth: 1, borderTopColor: Colors.inputBg, paddingTop: 10 },
+  pageNavBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.border },
+  pageNavBtnText: { fontSize: 11, fontWeight: '700', color: Colors.textDark },
   pageIndicatorText: { fontSize: 12, fontWeight: '800', color: '#495057' },
 
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#1A1A1A', marginTop: 10, marginBottom: 4 },
-  formInput: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 10, padding: 10, fontSize: 12, color: '#1A1A1A' },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: Colors.textDark, marginTop: 10, marginBottom: 4 },
+  formInput: { backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 10, fontSize: 12, color: Colors.textDark },
   libraryToggleBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', padding: 10, borderRadius: 10, marginTop: 14 },
 
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 20 },
   emptyIcon: { fontSize: 44, marginBottom: 10 },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A1A', marginBottom: 4 },
-  emptySubtitle: { fontSize: 12, color: '#6C757D', textAlign: 'center' },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: Colors.textDark, marginBottom: 4 },
+  emptySubtitle: { fontSize: 12, color: Colors.grayText, textAlign: 'center' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
-  modalContainer: { width: '100%', backgroundColor: '#FFFFFF', padding: 18, borderRadius: 16, borderWidth: 1, borderColor: '#E9ECEF', elevation: 5 },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A1A', textAlign: 'center', marginBottom: 4 },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
+  modalContainer: { width: '100%', backgroundColor: Colors.white, padding: 18, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, elevation: 5 },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: Colors.textDark, textAlign: 'center', marginBottom: 4 },
   filterSectionTitle: { fontSize: 12, fontWeight: '800', color: '#495057', marginTop: 12, marginBottom: 6 },
   filterOptionsGroup: { gap: 6, width: '100%' },
-  modalOptionBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF' },
-  activeModalOptionBtn: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  modalOptionBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
+  activeModalOptionBtn: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   modalOptionText: { fontSize: 12, color: '#495057', fontWeight: '600', textAlign: 'center' },
-  activeModalOptionText: { color: '#FFFFFF', fontWeight: '700' },
+  activeModalOptionText: { color: Colors.white, fontWeight: '700' },
    
   modalActionBtn: { width: '100%', paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  modalActionBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  modalActionBtnText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
 
-  detailTitle: { fontSize: 18, fontWeight: '900', color: '#1A1A1A', textAlign: 'center', marginBottom: 4 },
+  detailTitle: { fontSize: 18, fontWeight: '900', color: Colors.textDark, textAlign: 'center', marginBottom: 4 },
   detailTime: { fontSize: 12, color: '#D97706', fontWeight: '700', textAlign: 'center', marginBottom: 12 },
    
-  portionBox: { backgroundColor: '#F8F9FA', padding: 10, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#E9ECEF' },
+  portionBox: { backgroundColor: Colors.inputBg, padding: 10, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: Colors.border },
   portionTitle: { fontSize: 11, fontWeight: '800', color: '#495057', textAlign: 'center' },
-  portionBtn: { flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF', alignItems: 'center' },
-  portionBtnActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  portionBtn: { flex: 1, backgroundColor: Colors.white, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  portionBtnActive: { backgroundColor: Colors.textDark, borderColor: Colors.textDark },
   portionBtnText: { fontSize: 11, fontWeight: '700', color: '#495057' },
 
   youtubeButton: { backgroundColor: '#EF4444', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginBottom: 14 },
-  youtubeButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  youtubeButtonText: { color: Colors.white, fontWeight: '700', fontSize: 12 },
 
-  detailSubTitle: { fontSize: 13, fontWeight: '800', color: '#1A1A1A', marginTop: 12, marginBottom: 6 },
+  detailSubTitle: { fontSize: 13, fontWeight: '800', color: Colors.textDark, marginTop: 12, marginBottom: 6 },
   detailText: { fontSize: 13, color: '#495057', marginBottom: 4, fontWeight: '500' },
-  stepText: { fontSize: 13, color: '#333333', marginBottom: 8, backgroundColor: '#F8F9FA', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF', lineHeight: 18 }
+  stepText: { fontSize: 13, color: '#333333', marginBottom: 8, backgroundColor: Colors.inputBg, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, lineHeight: 18 }
 });

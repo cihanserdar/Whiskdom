@@ -1,6 +1,36 @@
 import { UserPreferences } from '../context/AppContext';
 import { supabase } from './supabase';
 
+// Supabase'in functions.invoke() hatası, Edge Function'ın döndürdüğü asıl
+// { error: "..." } mesajını .message içinde GÖSTERMEZ — "non-2xx status code"
+// gibi genel bir metin verir. Asıl mesajı, hatanın "context" alanındaki
+// gerçek HTTP yanıtından (gövdesinden) okumamız gerekiyor.
+export async function extractInvokeErrorMessage(error: unknown): Promise<string> {
+  const context =
+    error && typeof error === 'object' && 'context' in error
+      ? (error as { context: unknown }).context
+      : null;
+
+  // instanceof Response yerine "duck typing": RN'de global Response birden
+  // fazla kopya olabildiği için instanceof güvenilir çalışmayabiliyor.
+  if (context && typeof context === 'object' && typeof (context as { json?: unknown }).json === 'function') {
+    const res = context as { json: () => Promise<unknown>; text: () => Promise<string> };
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) return String(body.error);
+    } catch {
+      try {
+        const text = await res.text();
+        if (text) return text;
+      } catch {
+        // yoksay, aşağıdaki genel mesaja düş
+      }
+    }
+  }
+
+  return error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu.';
+}
+
 export interface AIRecipeResult {
   title: string;
   cookingTime: string;
@@ -197,7 +227,7 @@ Format şu şekilde olsun:
       body: { prompt },
     });
 
-    if (error) throw error;
+    if (error) throw new Error(await extractInvokeErrorMessage(error));
 
     const textResponse = extractResponseText(data);
     if (textResponse) {
@@ -213,8 +243,9 @@ Format şu şekilde olsun:
       }
       return parsed;
     }
-  } catch {
-    // Hata durumunda sessizce çıkılır
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : JSON.stringify(error);
+    throw new Error(message);
   }
   return null;
 };
@@ -249,14 +280,15 @@ Cevabını SADECE geçerli bir JSON dizisi (Array) olarak döndür. Başka hiçb
       },
     });
 
-    if (error) throw error;
+    if (error) throw new Error(await extractInvokeErrorMessage(error));
 
     const textResponse = extractResponseText(data);
     if (textResponse) {
       return safeJsonParse(textResponse);
     }
-  } catch {
-    // Hata durumunda sessizce çıkılır
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : JSON.stringify(error);
+    throw new Error(message);
   }
   return null;
 };
@@ -294,7 +326,7 @@ export const formatUserRecipeWithAI = async (input: UserRecipeInput) => {
       body: { prompt },
     });
 
-    if (error) throw error;
+    if (error) throw new Error(await extractInvokeErrorMessage(error));
 
     const textResponse = extractResponseText(data);
 

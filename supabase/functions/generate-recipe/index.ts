@@ -22,6 +22,12 @@ interface RequestPayload {
   feature?: string; // 'aiRecipe' veya 'receipt'
 }
 
+interface QuotaResult {
+  allowed: boolean;
+  remaining: number;
+  message?: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -56,8 +62,8 @@ Deno.serve(async (req) => {
     const targetFeature = feature === 'receipt' ? 'receipt' : 'aiRecipe';
 
     // Güvenli kota kontrolü ve düşürme (Her iki olası RPC parametre imzasını da destekler)
-    let quotaResult: any = null;
-    let quotaError: any = null;
+    let quotaResult: QuotaResult | null = null;
+    let quotaError: { message: string } | null = null;
 
     const res1 = await supabaseClient.rpc('consume_quota_safely', {
       p_user_id: user.id,
@@ -65,12 +71,12 @@ Deno.serve(async (req) => {
     });
 
     if (!res1.error) {
-      quotaResult = res1.data;
+      quotaResult = res1.data as QuotaResult;
     } else {
       const res2 = await supabaseClient.rpc('consume_quota_safely', {
         feature_type: targetFeature
       });
-      quotaResult = res2.data;
+      quotaResult = res2.data as QuotaResult;
       quotaError = res2.error;
     }
 
@@ -112,7 +118,7 @@ Deno.serve(async (req) => {
       ];
     }
 
-    const apiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const apiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents })

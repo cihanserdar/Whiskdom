@@ -619,6 +619,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // OTOMATİK SÜPÜRME: Kullanıcı hiçbir şey yapmasa bile, tarihi geçen
+  // ürünler envanterden kaldırılıp "ziyan oldu" sayacına (waste_stats.wasted_count)
+  // otomatik eklenir. Kullanıcının X butonuyla manuel sildiği ürünler
+  // (örn. yanlışlıkla eklenmiş bir ürün) bu sayaca DAHİL EDİLMEZ —
+  // sadece burada, tarih kontrolüyle tespit edilenler dahil edilir.
+  // Aynı anda birden fazla ürün süresi geçmiş olabileceğinden, state
+  // güncellemesinde eski (stale) closure sorunu yaşamamak için tek
+  // seferde toplu işlenir.
+  const sweepExpiredItems = async (expiredItems: InventoryItem[]) => {
+    if (!user || expiredItems.length === 0) return;
+    const expiredIds = expiredItems.map(item => item.id);
+
+    const { error } = await supabase.from('inventory').delete().in('id', expiredIds);
+    if (error) return;
+
+    const updatedInventory = inventory.filter(item => !expiredIds.includes(item.id));
+    setInventoryState(updatedInventory);
+    safeScheduleNotifications(updatedInventory);
+
+    const newStats = { ...wasteStats, wastedCount: wasteStats.wastedCount + expiredItems.length };
+    setWasteStats(newStats);
+
+    await supabase.from('waste_stats').update({
+      saved_count: newStats.savedCount,
+      wasted_count: newStats.wastedCount,
+    }).eq('user_id', user.id);
+  };
+
   const updateInventoryItem = async (updatedItem: InventoryItem) => {
     if (!user) return;
     const { error } = await supabase
@@ -918,6 +946,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) < 0;
     });
   };
+
+  // Envanter her yüklendiğinde/değiştiğinde, tarihi geçmiş ürün olup
+  // olmadığını kontrol eder ve varsa otomatik olarak "ziyan oldu" sayar.
+  // Kullanıcının herhangi bir işlem yapmasına gerek yoktur; X ile manuel
+  // silme bu akışa dahil değildir, sadece tarih geçmesiyle tetiklenir.
+  useEffect(() => {
+    if (!user || inventory.length === 0) return;
+    const expired = getExpiredItems();
+    if (expired.length > 0) {
+      sweepExpiredItems(expired);
+    }
+  }, [inventory, user]);
 
   const getExpiringItemsByRange = (rangeDays: number) => {
     if (rangeDays === 0) return [];

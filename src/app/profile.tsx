@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 import { AppContext } from '../context/AppContext';
 import { sendPasswordResetEmail } from '../services/auth';
 import { sendBadgeUnlockedNotification } from '../services/notificationService';
@@ -58,7 +59,6 @@ export default function ProfileScreen() {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [badgesExpanded, setBadgesExpanded] = useState(false);
   
-  // 👑 PRO CHECKOUT (YAKINDA) EKRANI STATE'İ
   const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
   const [userTier, setUserTier] = useState<'free' | 'pro'>('free');
 
@@ -76,7 +76,6 @@ export default function ProfileScreen() {
   const historyLen = history.length;
   const favoritesLen = favorites.length;
 
-  // 💡 KOTA VE TIER BİLGİSİNİ KONTROL ET
   const fetchTierInfo = async () => {
     try {
       const stored = await AsyncStorage.getItem('@whiskdom_user_quota_v1');
@@ -95,7 +94,6 @@ export default function ProfileScreen() {
     fetchTierInfo();
   }, []);
 
-  // 💡 SUPABASE'DEN GÜNCEL VERİLERİ ÇEKME VE UYGULAMA İÇİNDEN SUPABASE'E YAZMA (SYNC)
   useEffect(() => {
     const syncUserDataWithSupabase = async () => {
       try {
@@ -167,13 +165,13 @@ export default function ProfileScreen() {
     },
     {
       id: 'sifir_atik',
-      icon: '♻️️',
+      icon: '♻',
       name: 'Sıfır Atık Gurusu',
       unlocked: savedCount >= 20,
       unlockedDate: savedCount >= 20 ? '12.09.2026' : undefined,
       description: 'Mutfakta hiçbir gıdayı ziyan etmeyerek tam 20 ürünü israftan kurtaran üst düzey çevreci şef unvanı.',
       requirement: `Gereksinim: 20 ürün kurtarmak. (Şu anki durum: ${savedCount}/20)`,
-      grantsTitle: 'Sıfır Atık Gurusu ♻️️'
+      grantsTitle: 'Sıfır Atık Gurusu ♻'
     },
     {
       id: 'simyaci',
@@ -197,14 +195,12 @@ export default function ProfileScreen() {
     }
   ];
 
-  // MAİL İLE ŞİFRE SIFIRLAMA LİNKİNDEN DÖNÜLDÜYSE MODALI OTOMATİK AÇ
   useEffect(() => {
     if (isPasswordRecovery) {
       setPasswordModalVisible(true);
     }
   }, [isPasswordRecovery]);
 
-  // YENİ KAZANILAN ROZET İÇİN OTOMATİK BİLDİRİM KONTROLÜ
   useEffect(() => {
     const checkBadgeNotifications = async () => {
       try {
@@ -265,7 +261,6 @@ export default function ProfileScreen() {
     Alert.alert("Başarılı! 👤", "Profil adınız güncellendi.");
   };
 
-  // ŞİFRE DEĞİŞTİR / SIFIRLA ORTAK UX KONTROLÜ
   const handlePasswordMenuPress = () => {
     setTimeout(() => {
       if (isPasswordRecovery) {
@@ -381,7 +376,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 👑 PRO PAKET DURUM WIDGET'I (YAKINDA MODALI AÇAR) */}
+      {/* PRO PAKET WIDGET'I */}
       <TouchableOpacity 
         style={[styles.proWidgetCard, userTier === 'pro' && styles.proWidgetActive]} 
         onPress={() => setCheckoutModalVisible(true)}
@@ -395,11 +390,11 @@ export default function ProfileScreen() {
               <Text style={styles.proWidgetSubTitle}>Bol Hak ve Özel Özellikler</Text>
             </View>
           </View>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A1A1A' }}>›</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.textDark }}>›</Text>
         </View>
       </TouchableOpacity>
 
-      {/* MUTFAK TASARRUF ÖZETİ WIDGET'I */}
+      {/* MUTFAK TASARRUF ÖZETİ */}
       <View style={styles.wasteSummaryCard}>
         <View style={styles.wasteHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -451,7 +446,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* BAŞARI ROZETLERİ & CHALLENGES */}
+      {/* ROZETLER */}
       <View style={styles.badgeSectionHeaderRow}>
         <Text style={styles.sectionHeader}>🏆 Mutfak Rozetlerim & Unvanlar</Text>
         <TouchableOpacity 
@@ -470,7 +465,7 @@ export default function ProfileScreen() {
           <TouchableOpacity 
             key={idx} 
             activeOpacity={0.8}
-            style={[styles.badgeCard, !b.unlocked && { opacity: 0.5, backgroundColor: '#F1F3F5' }]}
+            style={[styles.badgeCard, !b.unlocked && { opacity: 0.5, backgroundColor: Colors.inputBg }]}
             onPress={() => setSelectedBadge(b)}
           >
             <Text style={styles.badgeIcon}>{b.icon}</Text>
@@ -490,7 +485,7 @@ export default function ProfileScreen() {
               <TouchableOpacity 
                 key={idx + 3} 
                 activeOpacity={0.8}
-                style={[styles.badgeCard, !b.unlocked && { opacity: 0.5, backgroundColor: '#F1F3F5' }]}
+                style={[styles.badgeCard, !b.unlocked && { opacity: 0.5, backgroundColor: Colors.inputBg }]}
                 onPress={() => setSelectedBadge(b)}
               >
                 <Text style={styles.badgeIcon}>{b.icon}</Text>
@@ -504,7 +499,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* DİYET VE ALERJEN ÖZETİ */}
+      {/* DİYET VE ALERJEN */}
       <Text style={styles.sectionHeader}>🥗 Diyet & Alerjen Profili</Text>
       <View style={styles.prefSummaryBox}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -526,7 +521,7 @@ export default function ProfileScreen() {
         </Text>
       </View>
 
-      {/* DESTEK, GÜVENLİK VE ÇIKIŞ YAP */}
+      {/* DESTEK & GÜVENLİK */}
       <Text style={styles.sectionHeader}>📞 Destek & Güvenlik</Text>
       <View style={styles.menuGroupCard}>
         <TouchableOpacity style={styles.menuItemRow} onPress={handlePasswordMenuPress} activeOpacity={0.7}>
@@ -560,7 +555,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 👑 PRO / ÖDEME TIKLANDIĞINDA AÇILAN "ÇOK YAKINDA" MODALI */}
+      {/* MODALLAR */}
       <Modal visible={checkoutModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -575,18 +570,16 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* ROZET DETAY MODALI */}
       <Modal visible={!!selectedBadge} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            
             <View style={styles.modalHeaderRow}>
               <Text style={{ fontSize: 32 }}>{selectedBadge?.icon}</Text>
               <Text style={styles.modalTitleText}>{selectedBadge?.name}</Text>
             </View>
 
-            <View style={[styles.badgeStatusBox, selectedBadge?.unlocked ? { backgroundColor: '#F1F3F5' } : { backgroundColor: '#FCE8E6' }]}>
-              <Text style={[styles.badgeStatusText, selectedBadge?.unlocked ? { color: '#1A1A1A' } : { color: '#9B1C1C' }]}>
+            <View style={[styles.badgeStatusBox, selectedBadge?.unlocked ? { backgroundColor: Colors.inputBg } : { backgroundColor: '#FCE8E6' }]}>
+              <Text style={[styles.badgeStatusText, selectedBadge?.unlocked ? { color: Colors.textDark } : { color: '#9B1C1C' }]}>
                 {selectedBadge?.unlocked 
                   ? `🎉 Bu rozeti ${selectedBadge.unlockedDate || 'bugün'} başardığınız için kazandınız!\nUnvan ödülü: ${selectedBadge.grantsTitle}` 
                   : '🔒 Bu rozet henüz kilitli.'}
@@ -596,7 +589,6 @@ export default function ProfileScreen() {
             <Text style={styles.badgeDetailDesc}>{selectedBadge?.description}</Text>
             <Text style={styles.badgeDetailReq}>{selectedBadge?.requirement}</Text>
 
-            {/* UNVANI KUŞAN BUTONU */}
             {selectedBadge?.unlocked && (
               <TouchableOpacity 
                 style={styles.equipBtn} 
@@ -614,7 +606,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* ŞİFRE DEĞİŞTİRME MODALI */}
       <Modal visible={passwordModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -633,16 +624,16 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
               <TouchableOpacity 
-                style={[styles.modalBtn, { backgroundColor: '#E2E8F0' }]} 
+                style={[styles.modalBtn, { backgroundColor: Colors.border }]} 
                 onPress={() => {
                   setPasswordModalVisible(false);
                   setIsPasswordRecovery(false);
                 }} 
                 activeOpacity={0.8}
               >
-                <Text style={[styles.modalBtnText, { color: '#1A1A1A' }]}>İptal</Text>
+                <Text style={[styles.modalBtnText, { color: Colors.textDark }]}>İptal</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#1A1A1A' }]} onPress={handleChangePassword} activeOpacity={0.8}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.primary }]} onPress={handleChangePassword} activeOpacity={0.8}>
                 <Text style={styles.modalBtnText}>Güncelle</Text>
               </TouchableOpacity>
             </View>
@@ -650,7 +641,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* UYGULAMA HAKKINDA MODALI */}
       <Modal visible={aboutModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -665,7 +655,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* GİZLİLİK POLİTİKASI MODALI */}
       <Modal visible={privacyModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -680,7 +669,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* DİYET VE ALERJEN DÜZENLEME MODALI */}
       <Modal visible={prefModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -709,7 +697,7 @@ export default function ProfileScreen() {
                 return (
                   <TouchableOpacity 
                     key={allergen}
-                    style={[styles.modalOptionBtn, active && { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' }]}
+                    style={[styles.modalOptionBtn, active && { backgroundColor: Colors.primary, borderColor: Colors.primary }]}
                     onPress={() => handleToggleAllergen(allergen)}
                     activeOpacity={0.8}
                   >
@@ -726,7 +714,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* PROFİL BİLGİSİ DÜZENLEME MODALI */}
       <Modal visible={editModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -738,10 +725,10 @@ export default function ProfileScreen() {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#E2E8F0' }]} onPress={() => setEditModalVisible(false)} activeOpacity={0.8}>
-                <Text style={[styles.modalBtnText, { color: '#1A1A1A' }]}>İptal</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.border }]} onPress={() => setEditModalVisible(false)} activeOpacity={0.8}>
+                <Text style={[styles.modalBtnText, { color: Colors.textDark }]}>İptal</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#1A1A1A' }]} onPress={handleSaveProfile} activeOpacity={0.8}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.primary }]} onPress={handleSaveProfile} activeOpacity={0.8}>
                 <Text style={styles.modalBtnText}>Kaydet</Text>
               </TouchableOpacity>
             </View>
@@ -754,83 +741,82 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  container: { flex: 1, backgroundColor: Colors.surface },
   scrollContent: { paddingTop: 54, paddingHorizontal: 18, paddingBottom: 40 },
-  screenTitle: { fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5, marginBottom: 16, textAlign: 'center' },
+  screenTitle: { fontSize: 24, fontWeight: '900', color: Colors.textDark, letterSpacing: -0.5, marginBottom: 16, textAlign: 'center' },
 
-  profileCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E9ECEF', elevation: 1, marginBottom: 12 },
+  profileCard: { flexDirection: 'row', backgroundColor: Colors.white, padding: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, elevation: 1, marginBottom: 12 },
   avatar: { width: 56, height: 56, borderRadius: 28, marginRight: 14 },
   profileInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
-  userTitle: { fontSize: 12, color: '#1A1A1A', fontWeight: '700', marginTop: 2 },
-  userEmail: { fontSize: 12, color: '#6C757D', fontWeight: '500', marginTop: 2 },
-  editBtn: { padding: 8, backgroundColor: '#F8F9FA', borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF' },
+  userName: { fontSize: 16, fontWeight: '800', color: Colors.textDark },
+  userTitle: { fontSize: 12, color: Colors.textDark, fontWeight: '700', marginTop: 2 },
+  userEmail: { fontSize: 12, color: Colors.grayText, fontWeight: '500', marginTop: 2 },
+  editBtn: { padding: 8, backgroundColor: Colors.inputBg, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
 
-  // PRO WIDGET STYLES
   proWidgetCard: { backgroundColor: '#F3E8FF', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E9D5FF', elevation: 1 },
   proWidgetActive: { backgroundColor: '#EDE9FE', borderColor: '#C084FC' },
   proWidgetTitle: { fontSize: 14, fontWeight: '900', color: '#7E22CE' },
   proWidgetSubTitle: { fontSize: 11, color: '#6B21A8', fontWeight: '600', marginTop: 2 },
 
-  wasteSummaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
+  wasteSummaryCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: Colors.border, elevation: 1 },
   wasteHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  wasteCardTitle: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
-  successBadge: { backgroundColor: '#1A1A1A', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  successBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  wasteCardTitle: { fontSize: 14, fontWeight: '800', color: Colors.textDark },
+  successBadge: { backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  successBadgeText: { color: Colors.white, fontSize: 11, fontWeight: '700' },
   wasteStatsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 14 },
   wasteStatItem: { alignItems: 'center', flex: 1 },
-  wasteSavedNumber: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
+  wasteSavedNumber: { fontSize: 16, fontWeight: '800', color: Colors.textDark },
   wasteWastedNumber: { fontSize: 16, fontWeight: '800', color: '#E53E3E' },
-  wasteStatLabel: { fontSize: 11, color: '#6C757D', fontWeight: '500', marginTop: 2 },
-  verticalDivider: { width: 1, height: 28, backgroundColor: '#E9ECEF' },
-  progressBarBg: { height: 6, backgroundColor: '#E9ECEF', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#1A1A1A', borderRadius: 3 },
+  wasteStatLabel: { fontSize: 11, color: Colors.grayText, fontWeight: '500', marginTop: 2 },
+  verticalDivider: { width: 1, height: 28, backgroundColor: Colors.border },
+  progressBarBg: { height: 6, backgroundColor: Colors.border, borderRadius: 3, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 3 },
 
-  sectionHeader: { fontSize: 14, fontWeight: '800', color: '#1A1A1A', marginBottom: 0 },
+  sectionHeader: { fontSize: 14, fontWeight: '800', color: Colors.textDark, marginBottom: 0 },
   badgeSectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 10 },
-  expandToggleBtn: { backgroundColor: '#EDF2F7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  expandToggleText: { fontSize: 11, fontWeight: '700', color: '#1A1A1A' },
+  expandToggleBtn: { backgroundColor: Colors.border, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  expandToggleText: { fontSize: 11, fontWeight: '700', color: Colors.textDark },
 
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-  statGridBox: { flex: 1, minWidth: '45%', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
-  gridNumber: { fontSize: 16, fontWeight: '800', color: '#1A1A1A' },
-  gridLabel: { fontSize: 11, color: '#6C757D', fontWeight: '500', marginTop: 3 },
+  statGridBox: { flex: 1, minWidth: '45%', backgroundColor: Colors.white, padding: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, elevation: 1 },
+  gridNumber: { fontSize: 16, fontWeight: '800', color: Colors.textDark },
+  gridLabel: { fontSize: 11, color: Colors.grayText, fontWeight: '500', marginTop: 3 },
 
   badgeContainer: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   expandedBadgeContainer: { marginTop: 6, marginBottom: 6 },
   challengeSubHeader: { fontSize: 12, fontWeight: '700', color: '#718096', marginBottom: 8 },
 
-  badgeCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
+  badgeCard: { flex: 1, backgroundColor: Colors.white, padding: 12, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, elevation: 1 },
   badgeIcon: { fontSize: 24, marginBottom: 4 },
-  badgeName: { fontSize: 12, fontWeight: '800', color: '#1A1A1A' },
-  badgeDesc: { fontSize: 10, color: '#1A1A1A', fontWeight: '700', marginTop: 2 },
+  badgeName: { fontSize: 12, fontWeight: '800', color: Colors.textDark },
+  badgeDesc: { fontSize: 10, color: Colors.textDark, fontWeight: '700', marginTop: 2 },
 
-  badgeStatusBox: { padding: 10, borderRadius: 10, marginVertical: 10, width: '100%', borderWidth: 1, borderColor: '#E9ECEF' },
+  badgeStatusBox: { padding: 10, borderRadius: 10, marginVertical: 10, width: '100%', borderWidth: 1, borderColor: Colors.border },
   badgeStatusText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   badgeDetailDesc: { fontSize: 13, color: '#4A5568', textAlign: 'center', marginBottom: 8, lineHeight: 18, fontWeight: '500' },
   badgeDetailReq: { fontSize: 11, color: '#718096', fontStyle: 'italic', textAlign: 'center' },
 
-  prefSummaryBox: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 16, elevation: 1 },
-  prefSummaryTitle: { fontSize: 12, fontWeight: '800', color: '#1A1A1A' },
-  editPrefBtn: { backgroundColor: '#F8F9FA', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF' },
-  editPrefBtnText: { fontSize: 11, fontWeight: '700', color: '#1A1A1A' },
+  prefSummaryBox: { backgroundColor: Colors.white, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, marginBottom: 16, elevation: 1 },
+  prefSummaryTitle: { fontSize: 12, fontWeight: '800', color: Colors.textDark },
+  editPrefBtn: { backgroundColor: Colors.inputBg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  editPrefBtnText: { fontSize: 11, fontWeight: '700', color: Colors.textDark },
   prefSummaryText: { fontSize: 12, color: '#4A5568', fontWeight: '500', marginTop: 6 },
 
-  filterSectionTitle: { fontSize: 13, fontWeight: '800', color: '#1A1A1A', marginTop: 12, marginBottom: 8, alignSelf: 'flex-start' },
-  modalOptionBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF' },
-  activeModalOptionBtn: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  filterSectionTitle: { fontSize: 13, fontWeight: '800', color: Colors.textDark, marginTop: 12, marginBottom: 8, alignSelf: 'flex-start' },
+  modalOptionBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
+  activeModalOptionBtn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   modalOptionText: { fontSize: 12, color: '#4A5568', fontWeight: '600' },
-  activeModalOptionText: { color: '#FFFFFF', fontWeight: '800' },
+  activeModalOptionText: { color: Colors.white, fontWeight: '800' },
 
-  menuGroupCard: { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 16, elevation: 1 },
-  menuItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },
-  menuItemText: { fontSize: 13, fontWeight: '700', color: '#1A1A1A' },
+  menuGroupCard: { backgroundColor: Colors.white, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, marginBottom: 16, elevation: 1 },
+  menuItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.inputBg },
+  menuItemText: { fontSize: 13, fontWeight: '700', color: Colors.textDark },
   menuItemArrow: { fontSize: 16, color: '#ADB5BD', fontWeight: 'bold' },
   aboutModalText: { fontSize: 13, color: '#4A5568', textAlign: 'center', marginBottom: 12, lineHeight: 18, fontWeight: '500' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
-  modalContainer: { width: '100%', backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E9ECEF', elevation: 5 },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: '#1A1A1A', marginBottom: 12, textAlign: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
+  modalContainer: { width: '100%', backgroundColor: Colors.white, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, elevation: 5 },
+  modalTitle: { fontSize: 16, fontWeight: '900', color: Colors.textDark, marginBottom: 12, textAlign: 'center' },
   
   modalHeaderRow: { 
     flexDirection: 'row', 
@@ -844,13 +830,13 @@ const styles = StyleSheet.create({
   modalTitleText: { 
     fontSize: 18, 
     fontWeight: '900', 
-    color: '#1A1A1A' 
+    color: Colors.textDark 
   },
 
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 4 },
-  modalInput: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#1A1A1A', fontWeight: '500', width: '100%' },
+  modalInput: { backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: Colors.textDark, fontWeight: '500', width: '100%' },
   modalBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  modalBtnText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
 
   equipBtn: {
     backgroundColor: '#0D9488',
@@ -863,13 +849,13 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   equipBtnText: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontWeight: '800',
     fontSize: 13
   },
 
   primaryBtn: { 
-    backgroundColor: '#1A1A1A', 
+    backgroundColor: Colors.primary, 
     paddingVertical: 12, 
     paddingHorizontal: 20,
     borderRadius: 12, 
@@ -879,7 +865,7 @@ const styles = StyleSheet.create({
     marginTop: 8 
   },
   primaryBtnText: { 
-    color: '#FFFFFF', 
+    color: Colors.white, 
     fontWeight: '800', 
     fontSize: 13 
   }

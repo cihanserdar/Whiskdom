@@ -15,10 +15,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 import { AppContext, InventoryItem } from '../context/AppContext';
 import SplashScreen from '../screens/SplashScreen';
+import { extractInvokeErrorMessage } from '../services/aiService';
 import { checkQuota } from '../services/quotaService';
-import { supabase } from '../services/supabase'; // 🔒 Güvenli Supabase istemcisi
+import { supabase } from '../services/supabase';
 
 const BRAND_SUGGESTIONS = ['Torku', 'Sütaş', 'İçim', 'Pınar', 'Öncü', 'Filiz', 'Tadım', 'Banvit', 'Reis', 'Söke', 'Komili'];
 const PRODUCT_SUGGESTIONS = ['Çikolata', 'Süt', 'Yumurta', 'Kaşar Peyniri', 'Yoğurt', 'Tereyağı', 'Domates', 'Kuru Soğan', 'Salça', 'Makarna', 'Kıyma'];
@@ -57,7 +59,6 @@ const parseTRDate = (dateStr: string): Date | null => {
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
-// Yardımcı: Metin miktar ifadesini (örn. "1 Litre" veya "500g") sayı ve birime ayırır
 const parseQuantityString = (qtyStr: string): { amount: number; unit: string } => {
   if (!qtyStr) return { amount: 1, unit: 'Adet' };
   const cleaned = qtyStr.trim();
@@ -85,7 +86,6 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'default' | 'expiry'>('default');
 
-  // Modal State'leri
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -97,34 +97,27 @@ export default function HomeScreen() {
   const [formExpiryDate, setFormExpiryDate] = useState('15-10-2026');
   const [formImageUrl, setFormImageUrl] = useState('');
 
-  // Besin Değerleri State'leri
   const [formCalories, setFormCalories] = useState('');
   const [formProtein, setFormProtein] = useState('');
   const [formCarbs, setFormCarbs] = useState('');
   const [formFat, setFormFat] = useState('');
 
-  // Takvim Seçici Modal State'leri (Gerçek Date Picker İçin)
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [selectedDateObj, setSelectedDateObj] = useState(new Date());
 
-  // Barkod Kamera Modalı State'i
   const [isBarcodeScannerVisible, setIsBarcodeScannerVisible] = useState(false);
   const [scanned, setScanned] = useState(false);
 
-  // FİŞ / GALERİ GEMINI AI TOPLU ÜRÜN SEÇİM MODALI STATE'LERİ
   const [isReceiptModalVisible, setIsReceiptModalVisible] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [receiptItems, setReceiptItems] = useState<ScannedReceiptItem[]>([]);
   const [receiptImageUri, setReceiptImageUri] = useState<string | null>(null);
   
-  // 🏷️ FİŞ KOTA STATE'İ
   const [remainingReceiptQuota, setRemainingReceiptQuota] = useState<number | null>(null);
 
-  // Öneri State'leri
   const [filteredBrands, setFilteredBrands] = useState<string[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<string[]>([]);
 
-  // Sayfa yüklendiğinde kalan fiş hakkını quotaService üzerinden çek
   useEffect(() => {
     updateReceiptQuota();
   }, []);
@@ -138,7 +131,6 @@ export default function HomeScreen() {
     }
   };
 
-  // AKILLI YENİDEN DENEME MEKANİZMALI GEMINI ANALİZİ (SUPABASE EDGE FUNCTION ÜZERİNDEN)
   const analyzeReceiptWithGemini = async (base64Image: string, imageUri: string) => {
     try {
       const quotaStatus = await checkQuota('receipt');
@@ -166,7 +158,6 @@ export default function HomeScreen() {
       try {
         const prompt = 'Bu alışveriş fişi veya gıda listesi fotoğrafındaki ürünleri tespit et. Sadece şu JSON formatında cevap ver: [{"name": "Ürün Adı", "brand": "Marka", "quantity": "Miktar (örn: 1 Litre, 2 Adet)"}]. Başka hiçbir açıklama yazma.';
 
-        // Edge Function'a hangi özellik olduğunu (feature: 'receipt') bildiriyoruz
         const { data, error } = await supabase.functions.invoke('generate-recipe', {
           body: { 
             prompt: prompt,
@@ -176,7 +167,7 @@ export default function HomeScreen() {
         });
 
         if (error) {
-          throw new Error(error.message || 'Supabase fonksiyonu hata döndürdü.');
+          throw new Error(await extractInvokeErrorMessage(error));
         }
 
         const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text;
@@ -203,18 +194,16 @@ export default function HomeScreen() {
 
             setReceiptItems(formattedItems);
             setIsAnalyzing(false);
-            
-            // NOT: consumeQuota('receipt') buradan kaldırıldı! Kota Edge Function içinde düşürüldü.
-            // Sadece arayüzdeki sayacı güncellemek için çağrılıyor:
             updateReceiptQuota();
             return;
           }
         }
         break;
-      } catch (error) {
+      } catch (error: unknown) {
         attempt++;
         if (attempt >= maxRetries) {
-          Alert.alert('Hata', 'Google Gemini AI analizinde bir hata oluştu. Lütfen birkaç saniye bekleyip tekrar deneyin.');
+          const message = error instanceof Error ? error.message : 'Google Gemini AI analizinde bir hata oluştu.';
+          Alert.alert('Hata', message);
           setIsAnalyzing(false);
           break;
         }
@@ -224,7 +213,6 @@ export default function HomeScreen() {
     setIsAnalyzing(false);
   };
 
-  // GALERİDEN SEÇİM
   const handlePickFromGallery = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -244,7 +232,6 @@ export default function HomeScreen() {
     }
   };
 
-  // KAMERADAN FİŞ ÇEKME
   const handleTakePhoto = async () => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     if (!permissionResult.granted) {
@@ -467,7 +454,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ÜST BAŞLIK */}
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.headerTitle}>Mutfak Envanteri</Text>
@@ -478,7 +464,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* İSTATİSTİK PANOSU */}
       <View style={styles.statsCard}>
         <View style={styles.statBox}>
           <Text style={styles.statNumber}>{totalItems}</Text>
@@ -491,7 +476,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ARAMA BAR */}
       <View style={styles.searchContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
@@ -508,7 +492,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* SIRALAMA SEÇENEKLERİ */}
       <View style={styles.sortContainer}>
         <TouchableOpacity
           style={[styles.sortPill, sortBy === 'default' && styles.sortPillActive]}
@@ -529,16 +512,14 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 🏷️ FİŞ KOTA GÖSTERGESİ */}
-      <View style={{ backgroundColor: '#F3E8FF', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 8, borderWidth: 1, borderColor: '#E9D5FF' }}>
-        <Text style={{ fontSize: 11, color: '#7E22CE', fontWeight: '800' }}>
+      <View style={{ backgroundColor: Colors.surface, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 8, borderWidth: 1, borderColor: Colors.border }}>
+        <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '800' }}>
           🧾 Günlük Kalan Fiş Tarama Hakkı: {remainingReceiptQuota !== null ? `${remainingReceiptQuota} / 1` : 'Yükleniyor...'}
         </Text>
       </View>
 
-      {/* TARAMA BUTONLARI */}
       <View style={styles.scanButtonGroup}>
-        <TouchableOpacity style={[styles.scanBtn, { backgroundColor: '#1A1A1A' }]} onPress={handleOpenBarcodeScanner}>
+        <TouchableOpacity style={[styles.scanBtn, { backgroundColor: Colors.primary }]} onPress={handleOpenBarcodeScanner}>
           <Text style={styles.scanBtnIcon}>║█║</Text>
           <Text style={styles.scanBtnText}>Barkod</Text>
         </TouchableOpacity>
@@ -554,7 +535,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ÜRÜN LİSTESİ */}
       <FlatList
         data={processedInventory}
         keyExtractor={(item) => item.id}
@@ -600,10 +580,10 @@ export default function HomeScreen() {
                       <View
                         style={[
                           styles.badgePill,
-                          diffDays <= 3 ? { backgroundColor: '#FCE8E6' } : { backgroundColor: '#E9ECEF' },
+                          diffDays <= 3 ? { backgroundColor: '#FCE8E6' } : { backgroundColor: Colors.surface },
                         ]}
                       >
-                        <Text style={[styles.badgeText, diffDays <= 3 ? { color: '#9B1C1C' } : { color: '#495057' }]}>
+                        <Text style={[styles.badgeText, diffDays <= 3 ? { color: '#9B1C1C' } : { color: Colors.textDark }]}>
                           {diffDays < 0 ? 'Tarihi Geçti' : diffDays === 0 ? 'Son Gün!' : `${diffDays} gün`}
                         </Text>
                       </View>
@@ -629,7 +609,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* BESİN PANELİ */}
               <View style={styles.nutritionRow}>
                 <View style={styles.nutriBadge}>
                   <Text style={styles.nutriLabel}>KALORİ</Text>
@@ -653,7 +632,6 @@ export default function HomeScreen() {
         }}
       />
 
-      {/* GEMINI AI FİŞ / GALERİ ANALİZ MODALI */}
       <Modal visible={isReceiptModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: '85%' }]}>
@@ -661,14 +639,14 @@ export default function HomeScreen() {
 
             {isAnalyzing ? (
               <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#1A1A1A" />
-                <Text style={{ marginTop: 14, fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>
+                <ActivityIndicator size="large" color={Colors.textDark} />
+                <Text style={{ marginTop: 14, fontSize: 13, fontWeight: '700', color: Colors.textDark }}>
                   Fiş üzerindeki ürünler okunuyor...
                 </Text>
               </View>
             ) : (
               <>
-                <Text style={{ fontSize: 12, color: '#6C757D', marginBottom: 12 }}>
+                <Text style={{ fontSize: 12, color: Colors.grayText, marginBottom: 12 }}>
                   Fişte tespit edilen ürünleri kontrol edip ekleyin:
                 </Text>
 
@@ -686,8 +664,8 @@ export default function HomeScreen() {
                         {item.selected && <Text style={styles.checkboxCheck}>✓</Text>}
                       </View>
                       <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{item.name}</Text>
-                        <Text style={{ fontSize: 11, color: '#6C757D' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textDark }}>{item.name}</Text>
+                        <Text style={{ fontSize: 11, color: Colors.grayText }}>
                           {item.brand ? `${item.brand} • ` : ''}{item.amount} {item.unit}
                         </Text>
                       </View>
@@ -700,7 +678,7 @@ export default function HomeScreen() {
                     <Text style={styles.modalCancelBtnText}>İptal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalSaveBtn, { backgroundColor: '#1A1A1A' }]}
+                    style={[styles.modalSaveBtn, { backgroundColor: Colors.primary }]}
                     onPress={handleAddSelectedReceiptItems}
                   >
                     <Text style={styles.modalSaveBtnText}>Seçilenleri Ekle</Text>
@@ -712,7 +690,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* MANUEL EKLEME / DÜZENLEME MODALI */}
       <Modal visible={isModalVisible} transparent={true} animationType="fade" onRequestClose={() => setIsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <ScrollView style={{ width: '100%' }} contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}>
@@ -728,7 +705,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* ÜRÜN ADI & ÖNERİ */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Ürün Adı</Text>
                 <TextInput
@@ -756,7 +732,6 @@ export default function HomeScreen() {
                 )}
               </View>
 
-              {/* MARKA & ÖNERİ */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Marka</Text>
                 <TextInput
@@ -784,7 +759,6 @@ export default function HomeScreen() {
                 )}
               </View>
 
-              {/* MİKTAR VE BİRİM SEÇİMİ */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Miktar ve Birim</Text>
                 <View style={styles.quantityRow}>
@@ -808,7 +782,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* SKT / TAKVİM SEÇİMİ KUTUSU */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
                 <TouchableOpacity style={styles.datePickerTrigger} onPress={() => setIsDatePickerVisible(true)}>
@@ -816,7 +789,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* BESİN DEĞERLERİ BİLGİSİ */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, { fontWeight: '800', marginTop: 4 }]}>
                   Besin Değerleri (100g)
@@ -861,7 +833,7 @@ export default function HomeScreen() {
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsModalVisible(false)}>
                   <Text style={styles.modalCancelBtnText}>İptal</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalSaveBtn, { backgroundColor: '#1A1A1A' }]} onPress={handleSave}>
+                <TouchableOpacity style={[styles.modalSaveBtn, { backgroundColor: Colors.primary }]} onPress={handleSave}>
                   <Text style={styles.modalSaveBtnText}>Kaydet</Text>
                 </TouchableOpacity>
               </View>
@@ -870,7 +842,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* GERÇEK ZAMANLI BARKOD TARAYICI MODALI */}
       <Modal visible={isBarcodeScannerVisible} animationType="slide">
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           <CameraView
@@ -902,7 +873,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* GERÇEK DATE PICKER TAKVİM BİLEŞENİ */}
       {isDatePickerVisible && (
         <DateTimePicker
           value={selectedDateObj}
@@ -916,86 +886,86 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 54, paddingHorizontal: 18, backgroundColor: '#F8F9FA' },
+  container: { flex: 1, paddingTop: 54, paddingHorizontal: 18, backgroundColor: Colors.surface },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 12, color: '#6C757D', marginTop: 2, fontWeight: '600' },
-  addManualBtn: { backgroundColor: '#1A1A1A', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  addManualBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
-  statsCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20, marginBottom: 14, borderWidth: 1, borderColor: '#E9ECEF', alignItems: 'center', justifyContent: 'space-around', elevation: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: Colors.textDark, letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 12, color: Colors.grayText, marginTop: 2, fontWeight: '600' },
+  addManualBtn: { backgroundColor: Colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  addManualBtnText: { color: Colors.white, fontWeight: '700', fontSize: 12 },
+  statsCard: { flexDirection: 'row', backgroundColor: Colors.white, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20, marginBottom: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'space-around', elevation: 1 },
   statBox: { alignItems: 'center' },
-  statNumber: { fontSize: 20, fontWeight: '800', color: '#1A1A1A' },
-  statLabel: { fontSize: 11, color: '#6C757D', fontWeight: '600', marginTop: 2 },
-  statDivider: { width: 1, height: 28, backgroundColor: '#E9ECEF' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 12, height: 44, marginBottom: 10, borderWidth: 1, borderColor: '#E9ECEF' },
+  statNumber: { fontSize: 20, fontWeight: '800', color: Colors.textDark },
+  statLabel: { fontSize: 11, color: Colors.grayText, fontWeight: '600', marginTop: 2 },
+  statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 12, height: 44, marginBottom: 10, borderWidth: 1, borderColor: Colors.border },
   searchIcon: { fontSize: 14, marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 13, color: '#1A1A1A' },
-  clearIcon: { fontSize: 14, color: '#6C757D', padding: 4 },
+  searchInput: { flex: 1, fontSize: 13, color: Colors.textDark },
+  clearIcon: { fontSize: 14, color: Colors.grayText, padding: 4 },
   sortContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  sortPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#E9ECEF' },
-  sortPillActive: { backgroundColor: '#1A1A1A' },
+  sortPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.border },
+  sortPillActive: { backgroundColor: Colors.primary },
   sortPillText: { fontSize: 11, fontWeight: '700', color: '#495057' },
-  sortPillTextActive: { color: '#FFFFFF' },
+  sortPillTextActive: { color: Colors.white },
   scanButtonGroup: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   scanBtn: { flex: 1, flexDirection: 'row', height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  scanBtnIcon: { fontSize: 13, color: '#FFFFFF' },
-  scanBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  scanBtnIcon: { fontSize: 13, color: Colors.white },
+  scanBtnText: { color: Colors.white, fontWeight: '700', fontSize: 12 },
   listContainer: { paddingBottom: 30 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E9ECEF', elevation: 1 },
+  card: { backgroundColor: Colors.white, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.border, elevation: 1 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center' },
   image: { width: 50, height: 50, borderRadius: 10, marginRight: 12 },
-  imagePlaceholder: { width: 50, height: 50, borderRadius: 10, backgroundColor: '#F1F3F5', justifyContent: 'center', alignItems: 'center', marginRight: 12, borderWidth: 1, borderColor: '#E9ECEF' },
+  imagePlaceholder: { width: 50, height: 50, borderRadius: 10, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginRight: 12, borderWidth: 1, borderColor: Colors.border },
   placeholderEmoji: { fontSize: 22 },
   infoContainer: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 6 },
-  itemName: { fontSize: 14, fontWeight: '800', color: '#1A1A1A' },
+  itemName: { fontSize: 14, fontWeight: '800', color: Colors.textDark },
   badgePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   badgeText: { fontSize: 10, fontWeight: '700' },
-  itemBrand: { fontSize: 11, color: '#6C757D', marginTop: 1 },
+  itemBrand: { fontSize: 11, color: Colors.grayText, marginTop: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   itemQuantity: { fontSize: 11, fontWeight: '600', color: '#495057' },
-  expiryDateText: { fontSize: 11, color: '#6C757D', fontWeight: '500' },
+  expiryDateText: { fontSize: 11, color: Colors.grayText, fontWeight: '500' },
   actionGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 6 },
-  editBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF', justifyContent: 'center', alignItems: 'center' },
-  editIconText: { fontSize: 13, color: '#1A1A1A', fontWeight: '600' },
+  editBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+  editIconText: { fontSize: 13, color: Colors.textDark, fontWeight: '600' },
   deleteBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#FCE8E6', borderWidth: 1, borderColor: '#F87171', justifyContent: 'center', alignItems: 'center' },
   deleteIconText: { fontSize: 12, color: '#9B1C1C', fontWeight: '800' },
 
-  nutritionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F1F3F5' },
+  nutritionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.inputBg },
   nutriBadge: { alignItems: 'center' },
   nutriLabel: { fontSize: 8, fontWeight: '700', color: '#868E96', textTransform: 'uppercase' },
-  nutriVal: { fontSize: 11, fontWeight: '800', color: '#212529', marginTop: 1 },
+  nutriVal: { fontSize: 11, fontWeight: '800', color: Colors.textDark, marginTop: 1 },
 
-  receiptItemRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E9ECEF', marginBottom: 8, backgroundColor: '#F8F9FA' },
-  receiptItemRowSelected: { borderColor: '#1A1A1A', backgroundColor: '#FFFFFF' },
-  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
-  checkboxCheck: { fontSize: 12, fontWeight: 'bold', color: '#1A1A1A' },
+  receiptItemRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, marginBottom: 8, backgroundColor: Colors.inputBg },
+  receiptItemRowSelected: { borderColor: Colors.primary, backgroundColor: Colors.white },
+  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+  checkboxCheck: { fontSize: 12, fontWeight: 'bold', color: Colors.primary },
 
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 20 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A1A', marginBottom: 6 },
-  emptySubtitle: { fontSize: 13, color: '#6C757D', textAlign: 'center', lineHeight: 18 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, paddingTop: 40 },
-  modalContainer: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E9ECEF', elevation: 5 },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A1A', marginBottom: 12 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: Colors.textDark, marginBottom: 6 },
+  emptySubtitle: { fontSize: 13, color: Colors.grayText, textAlign: 'center', lineHeight: 18 },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, paddingTop: 40 },
+  modalContainer: { width: '100%', backgroundColor: Colors.white, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: Colors.border, elevation: 5 },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: Colors.textDark, marginBottom: 12 },
   inputGroup: { marginBottom: 10 },
   inputLabel: { fontSize: 11, fontWeight: '700', color: '#495057', marginBottom: 4 },
-  modalInput: { backgroundColor: '#F8F9FA', borderRadius: 8, paddingHorizontal: 10, height: 38, fontSize: 12, color: '#1A1A1A', borderWidth: 1, borderColor: '#E9ECEF' },
-  suggestionDropdown: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 8, marginTop: 4, maxHeight: 100, elevation: 3 },
-  suggestionItem: { paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E9ECEF' },
-  suggestionText: { fontSize: 12, color: '#1A1A1A', fontWeight: '600' },
+  modalInput: { backgroundColor: Colors.inputBg, borderRadius: 8, paddingHorizontal: 10, height: 38, fontSize: 12, color: Colors.textDark, borderWidth: 1, borderColor: Colors.border },
+  suggestionDropdown: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, marginTop: 4, maxHeight: 100, elevation: 3 },
+  suggestionItem: { paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  suggestionText: { fontSize: 12, color: Colors.textDark, fontWeight: '600' },
   quantityRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  unitPill: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF', marginRight: 6 },
-  unitPillActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
-  unitPillText: { fontSize: 11, fontWeight: '700', color: '#1A1A1A' },
-  unitPillTextActive: { color: '#FFFFFF' },
-  datePickerTrigger: { backgroundColor: '#F8F9FA', height: 38, borderRadius: 8, borderWidth: 1, borderColor: '#E9ECEF', justifyContent: 'center', paddingHorizontal: 10 },
-  datePickerTriggerText: { fontSize: 12, fontWeight: '700', color: '#1A1A1A' },
+  unitPill: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginRight: 6 },
+  unitPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  unitPillText: { fontSize: 11, fontWeight: '700', color: Colors.textDark },
+  unitPillTextActive: { color: Colors.white },
+  datePickerTrigger: { backgroundColor: Colors.inputBg, height: 38, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', paddingHorizontal: 10 },
+  datePickerTriggerText: { fontSize: 12, fontWeight: '700', color: Colors.textDark },
   modalActionGroup: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  modalCancelBtn: { flex: 1, height: 38, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F3F5', borderWidth: 1, borderColor: '#E9ECEF' },
-  modalCancelBtnText: { fontSize: 12, fontWeight: '700', color: '#1A1A1A' },
+  modalCancelBtn: { flex: 1, height: 38, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
+  modalCancelBtnText: { fontSize: 12, fontWeight: '700', color: Colors.textDark },
   modalSaveBtn: { flex: 1, height: 38, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  modalSaveBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  modalSaveBtnText: { fontSize: 12, fontWeight: '700', color: Colors.white },
 
   scannerOverlay: {
     flex: 1,
@@ -1009,7 +979,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scannerTitle: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 4,
@@ -1030,7 +1000,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 24,
     height: 24,
-    borderColor: '#FFFFFF',
+    borderColor: Colors.white,
     borderWidth: 3,
   },
   topLeft: { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0 },

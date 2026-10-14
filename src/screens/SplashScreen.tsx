@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 
 interface SplashScreenProps {
   onFinish?: () => void;
@@ -48,7 +49,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
               <TextInput 
                 style={styles.input}
                 placeholder="E-posta adresinizi girin"
-                placeholderTextColor="#a3b8a4"
+                placeholderTextColor="#9CA3AF"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -63,7 +64,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
             </View>
           ) : (
             <View style={{ width: '100%', gap: 12 }}>
-              {/* GOOGLE İLE DEVAM ET (Harici paket gerektirmeyen şık tasarım) */}
+              {/* GOOGLE İLE DEVAM ET */}
               <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.85}>
                 <View style={styles.googleIconCircle}>
                   <Text style={styles.googleGText}>G</Text>
@@ -87,7 +88,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F3814',
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -99,14 +100,14 @@ const styles = StyleSheet.create({
   brandTitle: {
     fontSize: 40,
     fontWeight: '900',
-    color: '#ffffff',
+    color: Colors.white,
     letterSpacing: 6,
     marginBottom: 8,
     textAlign: 'center',
   },
   brandSubtitle: {
     fontSize: 13,
-    color: '#c8e6c9',
+    color: Colors.softSage,
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 18,
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   badgeText: {
-    color: '#ffffff',
+    color: Colors.white,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     width: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.white,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#f1f3f4',
+    backgroundColor: Colors.inputBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     color: '#4285F4',
   },
   googleButtonText: {
-    color: '#1A1A1A',
+    color: Colors.textDark,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -172,7 +173,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   emailButtonText: {
-    color: '#ffffff',
+    color: Colors.white,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -188,24 +189,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#ffffff',
+    color: Colors.white,
     fontSize: 14,
   },
   primaryButton: {
     width: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.white,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonText: {
-    color: '#0F3814',
+    color: Colors.primary,
     fontSize: 14,
     fontWeight: '800',
   },
   backText: {
-    color: '#c8e6c9',
+    color: Colors.softSage,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',

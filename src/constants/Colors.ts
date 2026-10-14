@@ -1,18 +1,14 @@
 export const Colors = {
-  primary: '#1A382B',       // Koyu Orman Yeşili (Forest Wisdom)
-  secondary: '#4A7C59',     // Adaçayı Yeşili (Sage Tech)
-  accent: '#D97724',        // Safran Amber (Muted Saffron)
-  
-  background: '#FAF9F6',    // Krem Canvas
-  cardBg: '#FFFFFF',        // Saf Beyaz Kart Yüzeyi
-  warmCardBg: '#F5F3EF',    // Sıcak Keten Krem
-  
-  textPrimary: '#1E2421',   // Koyu Slate
-  textSecondary: '#6B7280', // Yumuşak Gri Metin
-  textLight: '#FFFFFF',     // Beyaz Metin
-  
-  border: '#E5E7EB',        // Açık Çerçeve
-  danger: '#C62828',        // Uyarı / Silme Kırmızı
-  success: '#4A7C59',       // Başarı
-  warning: '#D97724',       // Yaklaşan SKT Uyarısı
+  primary: '#0F5132',       // Emerald Tech Green (Ana başlıklar, butonlar, aktif sekmeler)
+  accent: '#00FF85',        // Digital Mint / Neon Accent (AI kıvılcımları, aktif vurgular)
+  surface: '#E2FBE8',       // Soft Sage (Yüzeyler, hafif vurgular)
+  textDark: '#111111',      // Charcoal Text (Metinler, yüksek okunabilirlik)
+  background: '#0F5132',    // Derin arka plan
+  inputBg: '#F8F9FA',       // Input arka planı
+  border: '#E9ECEF',        // Çerçeve renkleri
+  white: '#FFFFFF',         // Beyaz alanlar
+  grayText: '#64748B',      // İkincil gri metinler
+  inactiveTab: '#888888',   // Aktif olmayan sekme rengi
+  overlay: 'rgba(0, 0, 0, 0.5)', // Modal arka plan karartması
+  softSage: '#D1E7DD',
 };

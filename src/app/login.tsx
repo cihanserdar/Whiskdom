@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 import { sendPasswordResetEmail, signInWithEmail, signInWithGoogle, signUpWithEmail } from '../services/auth';
 
 export default function LoginScreen() {
@@ -20,7 +21,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Giriş/Kaydol modları arası geçiş ve input sıfırlama
   const toggleAuthMode = () => {
     setIsSignUp((prev) => !prev);
     setFullName('');
@@ -54,7 +54,6 @@ export default function LoginScreen() {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
 
-      // Yanlış veya bulunamayan e-posta/şifre durumunda kullanıcıyı yönlendir
       if (
         errorMessage.includes('invalid login credentials') ||
         errorMessage.includes('user not found') ||
@@ -69,7 +68,7 @@ export default function LoginScreen() {
               text: 'Kaydol',
               style: 'default',
               onPress: () => {
-                if (!isSignUp) toggleAuthMode(); // Doğrudan Kaydol sekmesine aktarır (E-posta kutuda kalır)
+                if (!isSignUp) toggleAuthMode();
               },
             },
           ]
@@ -87,8 +86,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      // Buraya router.replace('/(tabs)') yazma! 
-      // AppContext içindeki onAuthStateChange oturumu algılayıp kendisi sekmelere yönlendirecektir.
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'Giriş yapılamadı.';
       Alert.alert('Google Giriş Hatası', errorMsg);
@@ -97,8 +94,6 @@ export default function LoginScreen() {
     }
   };
 
-
-  // 💡 GİRİŞ EKRANINDAN ŞİFRE SIFIRLAMA FONKSİYONU
   const handleForgotPassword = () => {
     Alert.alert(
       'Şifrenizi mi Unuttunuz? 🔒',
@@ -145,7 +140,6 @@ export default function LoginScreen() {
             {isSignUp ? 'Hesap Oluştur' : 'Giriş Yap'}
           </Text>
 
-          {/* Sadece Kaydol modunda Ad Soyad alanını göster */}
           {isSignUp && (
             <TextInput
               style={styles.input}
@@ -176,7 +170,6 @@ export default function LoginScreen() {
             onChangeText={setPassword}
           />
 
-          {/* SADECE GİRİŞ YAPARKEN GÖZÜKEN ŞİFREMİ UNUTTUM BUTONU */}
           {!isSignUp && (
             <TouchableOpacity style={styles.forgotPasswordBtn} onPress={handleForgotPassword}>
               <Text style={styles.forgotPasswordText}>Şifrenizi mi unuttunuz?</Text>
@@ -189,14 +182,13 @@ export default function LoginScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#FFF" />
+              <ActivityIndicator color={Colors.white} />
             ) : (
               <Text style={styles.primaryBtnText}>
                 {isSignUp ? 'Kaydol' : 'E-posta ile Giriş Yap'}
               </Text>
             )}
           </TouchableOpacity>
-
 
           <View style={styles.dividerContainer}>
             <View style={styles.divider} />
@@ -240,7 +232,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#1E3A27',
+    backgroundColor: Colors.background,
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 40,
@@ -252,17 +244,17 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 38,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: Colors.white,
     letterSpacing: 1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#A3D9A5',
+    color: Colors.accent,
     marginTop: 6,
     fontWeight: '500',
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     borderRadius: 20,
     padding: 24,
     elevation: 8,
@@ -270,19 +262,19 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1E3A27',
+    color: Colors.primary,
     marginBottom: 20,
     textAlign: 'center',
   },
   input: {
-    backgroundColor: '#F4F7F5',
+    backgroundColor: Colors.inputBg,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    color: '#1A1A1A',
+    color: Colors.textDark,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
     marginBottom: 14,
   },
   forgotPasswordBtn: {
@@ -292,18 +284,18 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 13,
-    color: '#2E7D32',
+    color: Colors.primary,
     fontWeight: '700',
   },
   primaryBtn: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: Colors.primary,
     paddingVertical: 15,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   primaryBtnText: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -315,7 +307,7 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: Colors.border,
   },
   dividerText: {
     marginHorizontal: 12,
@@ -327,7 +319,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     paddingVertical: 14,
@@ -340,7 +332,7 @@ const styles = StyleSheet.create({
   googleBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#334155',
+    color: Colors.textDark,
   },
   switchAuthBtn: {
     marginTop: 20,
@@ -348,10 +340,10 @@ const styles = StyleSheet.create({
   },
   switchAuthText: {
     fontSize: 14,
-    color: '#64748B',
+    color: Colors.grayText,
   },
   switchAuthHighlight: {
-    color: '#2E7D32',
+    color: Colors.primary,
     fontWeight: '800',
     textDecorationLine: 'underline',
   },

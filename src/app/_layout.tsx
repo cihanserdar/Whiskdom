@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Colors } from '../constants/Colors';
 import { AppContext, AppProvider } from '../context/AppContext';
 import { supabase } from '../services/supabase';
 import LoginScreen from './login';
@@ -44,8 +45,8 @@ function MainTabsNavigator() {
   // 1. Supabase Oturum Bilgisi Yükleniyorsa Beklet
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FA' }}>
-        <ActivityIndicator size="large" color="#1A1A1A" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.inputBg }}>
+        <ActivityIndicator size="large" color={Colors.textDark} />
       </View>
     );
   }
@@ -61,8 +62,8 @@ function MainTabsNavigator() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#2e7d32',
-          tabBarInactiveTintColor: '#888888',
+          tabBarActiveTintColor: Colors.primary,
+          tabBarInactiveTintColor: Colors.inactiveTab,
           tabBarStyle: {
             paddingBottom: 5,
             height: 60,
@@ -101,7 +102,7 @@ function MainTabsNavigator() {
           }}
         />
 
-        {/* ALT MENÜDE GİZLENEN ROTALAR (Sekme çubuğunda görünmez, rota olarak arka planda çalışır) */}
+        {/* ALT MENÜDE GİZLENEN ROTALAR */}
         <Tabs.Screen
           name="login"
           options={{
@@ -117,7 +118,7 @@ function MainTabsNavigator() {
         />
       </Tabs>
 
-      {/* ŞİFRE SIFIRLAMA BAĞLANTISIYLA GELİNDİĞİNDE HER EKRANIN ÜSTÜNDE AÇILAN GLOBAL POPUP */}
+      {/* ŞİFRE SIFIRLAMA MODALI */}
       <Modal visible={isPasswordRecovery} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -138,17 +139,17 @@ function MainTabsNavigator() {
 
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#E2E8F0' }]}
+                style={[styles.modalBtn, { backgroundColor: Colors.border }]}
                 onPress={() => {
                   setNewPassword('');
                   setIsPasswordRecovery(false);
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.modalBtnText, { color: '#1A1A1A' }]}>İptal</Text>
+                <Text style={[styles.modalBtnText, { color: Colors.textDark }]}>İptal</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#1A1A1A' }]}
+                style={[styles.modalBtn, { backgroundColor: Colors.primary }]}
                 onPress={handleGlobalChangePassword}
                 activeOpacity={0.8}
               >
@@ -171,12 +172,12 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
-  modalContainer: { width: '100%', backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E9ECEF', elevation: 5 },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: '#1A1A1A', marginBottom: 4, textAlign: 'center' },
-  modalSubtitle: { fontSize: 12, color: '#4A5568', textAlign: 'center', marginBottom: 10 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6 },
-  modalInput: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#E9ECEF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#1A1A1A', fontWeight: '500', width: '100%' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
+  modalContainer: { width: '100%', backgroundColor: Colors.white, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, elevation: 5 },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: Colors.textDark, marginBottom: 4, textAlign: 'center' },
+  modalSubtitle: { fontSize: 12, color: Colors.grayText, textAlign: 'center', marginBottom: 10 },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: Colors.grayText, marginBottom: 6 },
+  modalInput: { backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: Colors.textDark, fontWeight: '500', width: '100%' },
   modalBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  modalBtnText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
 });
