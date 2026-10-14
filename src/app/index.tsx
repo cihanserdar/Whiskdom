@@ -386,11 +386,12 @@ export default function HomeScreen() {
   };
 
   const handleValueChange = (event: any, selectedDate?: Date) => {
-    if (event.type === 'set' && selectedDate) {
-      setSelectedDateObj(selectedDate);
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const year = selectedDate.getFullYear();
+    const currentDate = selectedDate || (event instanceof Date ? event : undefined);
+    if (currentDate) {
+      setSelectedDateObj(currentDate);
+      const day = String(currentDate.getDate()).padStart(2, '0');
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const year = currentDate.getFullYear();
       setFormExpiryDate(`${day}-${month}-${year}`);
     }
     setIsDatePickerVisible(false);
